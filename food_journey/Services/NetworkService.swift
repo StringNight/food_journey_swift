@@ -219,6 +219,109 @@ class NetworkService {
         }
         return base64String
     }
+    
+    struct ChatHistory: Codable {
+        let content: String
+        let is_user: Bool
+        let created_at: String
+        let voice_url: String?
+        let image_url: String?
+        let transcribed_text: String?
+    }
+
+    /// 流式响应中可能的数据类型
+    enum StreamData {
+        case message(String)
+        case history([ChatHistory])
+    }
+    
+    
+    func parseStreamData(from jsonString: String) -> StreamData? {
+        guard let jsonData = jsonString.data(using: .utf8) else {
+            print("无法将字符串转换为 Data")
+            return nil
+        }
+        
+        do {
+            // 先转换为字典，判断 type
+            if let dict = try JSONSerialization.jsonObject(with: jsonData, options: []) as? [String: Any],
+               let type = dict["type"] as? String {
+                
+                if type == "message", let message = dict["data"] as? String {
+                    return .message(message)
+                }
+                else if type == "history", let historyArray = dict["data"] as? [[String: Any]] {
+                    // 将 history 数组再次转换为 JSON Data，再解码为 [ChatHistory]
+                    let jsonHistoryData = try JSONSerialization.data(withJSONObject: historyArray, options: [])
+                    let histories = try JSONDecoder().decode([ChatHistory].self, from: jsonHistoryData)
+                    return .history(histories)
+                }
+            }
+        } catch {
+            print("解析 JSON 时出错: \(error)")
+        }
+        return nil
+    }
+    
+    
+    
+    func streamRequest(
+        endpoint: String,
+        method: String = "GET",
+        body: Data? = nil,
+        requiresAuth: Bool = false,
+        contentType: String = "application/json"
+    ) async throws -> AsyncStream<StreamData> {
+        return AsyncStream<StreamData> { (continuation: AsyncStream<StreamData>.Continuation) in
+            Task {
+                do {
+                    guard let url = URL(string: baseURL + endpoint) else {
+                        throw NetworkError.invalidURL
+                    }
+                    
+                    var request = URLRequest(url: url)
+                    request.httpMethod = method
+                    request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+                    
+                    if requiresAuth {
+                        if let token = UserDefaults.standard.string(forKey: "auth_token") {
+                            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                        }
+                    }
+                    
+                    if let body = body {
+                        request.httpBody = body
+                        if let jsonString = String(data: body, encoding: .utf8) {
+                            print("Request Body: \(jsonString)")
+                        }
+                    }
+                    
+                    let (bytes, _) = try await URLSession.shared.bytes(for: request)
+                    print("Received bytes: \(bytes)")
+                    
+                    // let (data, response) = try await URLSession.shared.data(for: request)
+                    
+                    
+                    for try await line in bytes.lines {
+                        print("Received line: \(line)")
+                        guard line.hasPrefix("data:") else { continue }
+                        let jsonPart = line.dropFirst("data:".count).trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !jsonPart.isEmpty else { continue }
+                        
+                        print("Received JSON part: \(jsonPart)")
+                        if let streamData = parseStreamData(from: String(jsonPart)) {
+                            print("Parsed StreamData: \(streamData)")
+                            continuation.yield(streamData)
+                        }
+                    }
+                    
+                    continuation.finish()
+                } catch {
+                    continuation.finish()
+                }
+            }
+        }
+    }
 }
 
 enum NetworkError: Error {
@@ -233,4 +336,4 @@ enum NetworkError: Error {
 //    struct ChatRequest: Codable {
 //        let message: String
 //    }
-//} 
+//}

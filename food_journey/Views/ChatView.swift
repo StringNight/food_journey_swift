@@ -150,7 +150,7 @@ struct ChatView: View {
 }
 
 struct MessageView: View {
-    let message: Message
+    @ObservedObject var message: Message  // 改为 ObservedObject
     @StateObject private var chatService = ChatService.shared
     @State private var isPlayingVoice = false
     
@@ -168,6 +168,7 @@ struct MessageView: View {
                         .background(message.isUser ? Color.blue : Color.gray.opacity(0.2))
                         .foregroundColor(message.isUser ? .white : .primary)
                         .cornerRadius(16)
+                        .animation(.easeInOut, value: message.content) // 添加动画效果
                 
                 case .image:
                     if let imageUrl = message.imageUrl {
@@ -232,4 +233,4 @@ struct MessageView: View {
     NavigationView {
         ChatView()
     }
-} 
+}
