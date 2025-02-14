@@ -38,6 +38,8 @@ class ChatService: ObservableObject {
             messages.append(contentsOf: [userMessage, botMessage])
         }
         
+        var accumulatedContent = ""
+        
         // 使用 streamRequest 处理流式响应
         for try await streamData in try await networkService.streamRequest(
             endpoint: "/chat/stream",
@@ -47,20 +49,17 @@ class ChatService: ObservableObject {
         ) {
             switch streamData {
             case .message(let message):
+                accumulatedContent += message
                 await MainActor.run {
-                    botMessage.content = message
+                    botMessage.content = accumulatedContent
                     // 更新数组中的消息
                     if let index = messages.firstIndex(where: { $0.id == botMessage.id }) {
                         messages[index] = botMessage
                     }
                 }
-                print(botMessage.content)
             case .history:
                 break
-                
             }
-            
-            
         }
         return botMessage
     }

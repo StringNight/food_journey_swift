@@ -168,7 +168,8 @@ struct MessageView: View {
                         .background(message.isUser ? Color.blue : Color.gray.opacity(0.2))
                         .foregroundColor(message.isUser ? .white : .primary)
                         .cornerRadius(16)
-                        .animation(.easeInOut, value: message.content) // 添加动画效果
+                        .animation(.easeInOut(duration: 0.2), value: message.content) // 添加平滑动画
+                        .transition(.opacity) // 添加过渡效果
                 
                 case .image:
                     if let imageUrl = message.imageUrl {
