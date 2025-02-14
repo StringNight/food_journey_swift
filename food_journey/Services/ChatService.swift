@@ -26,7 +26,7 @@ class ChatService: ObservableObject {
             isUser: true
         )
         
-        var botMessage = Message(
+        let botMessage = Message(
             id: UUID().uuidString,
             type: .text,
             content: "",

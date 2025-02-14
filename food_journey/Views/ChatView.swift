@@ -22,6 +22,7 @@ struct ChatView: View {
                     }
                     .padding()
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity) // 添加这行
                 .onChange(of: chatService.messages.count) { _ in
                     if let lastMessage = chatService.messages.last {
                         withAnimation {
@@ -33,6 +34,7 @@ struct ChatView: View {
             
             Divider()
             
+            // 输入区域
             HStack(spacing: 8) {
                 // 语音按钮
                 Button(action: handleVoiceButton) {
@@ -65,6 +67,7 @@ struct ChatView: View {
             }
             .padding()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity) // 添加这行
         .navigationTitle("聊天")
         .sheet(isPresented: $showImagePicker) {
             ImagePicker(image: $selectedImage)
