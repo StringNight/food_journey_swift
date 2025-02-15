@@ -209,8 +209,45 @@ class NetworkService {
     }
     
     func uploadAudio(_ audioData: Data, filename: String, endpoint: String) async throws -> FoodJourneyModels.AudioUploadResponse {
-        let url = try await uploadFile(audioData, filename: filename, mimeType: "audio/m4a", endpoint: endpoint)
-        return FoodJourneyModels.AudioUploadResponse(url: url)
+        guard let url = URL(string: baseURL + endpoint) else {
+            throw NetworkError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        
+        let boundary = UUID().uuidString
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        
+        if let token = UserDefaults.standard.string(forKey: "auth_token") {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        // 构建请求体，完全匹配 Python 的 files 参数格式
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: audio/m4a\r\n\r\n".data(using: .utf8)!)
+        body.append(audioData)
+        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+        
+        request.httpBody = body
+        print(body)
+
+        let (responseData, response) = try await URLSession.shared.data(for: request)
+        
+        if let httpResponse = response as? HTTPURLResponse,
+           !(200...299).contains(httpResponse.statusCode) {
+            if let errorString = String(data: responseData, encoding: .utf8) {
+                print("上传失败: \(errorString)")
+            }
+            throw NetworkError.serverError("音频上传失败: \(httpResponse.statusCode)")
+        }
+        
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        print("Response Data: \(String(data: responseData, encoding:.utf8)!)")
+        return try decoder.decode(FoodJourneyModels.AudioUploadResponse.self, from: responseData)
     }
     
     func transferImageToBase64(_ image: UIImage) async throws -> String {

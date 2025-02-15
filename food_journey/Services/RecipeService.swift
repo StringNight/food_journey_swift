@@ -12,12 +12,25 @@ class RecipeService: ObservableObject {
     
     private init() {}
     
+    struct RecipeResponse: Codable {
+        let schema_version: String
+        let recipes: [Recipe]
+        let pagination: Pagination
+        
+        struct Pagination: Codable {
+            let total: Int
+            let page: Int
+            let per_page: Int
+            let pages: Int
+        }
+    }
+    
     func fetchRecipes() async throws {
-        let response: [Recipe] = try await networkService.request(
+        let response: RecipeResponse = try await networkService.request(
             endpoint: "/recipes",
             requiresAuth: true
         )
-        recipes = response
+        recipes = response.recipes
     }
     
     func fetchFavoriteRecipes() async throws {
@@ -81,4 +94,17 @@ class RecipeService: ObservableObject {
             requiresAuth: true
         )
     }
-} 
+    
+    func createRecipe(_ recipe: FoodJourneyModels.RecipeCreate) async throws {
+        let response: FoodJourneyModels.RecipeResponse = try await networkService.request(
+            endpoint: "/recipes",
+            method: "POST",
+            body: try JSONEncoder().encode(recipe),
+            requiresAuth: true
+        )
+        // 添加新创建的菜谱到列表
+        if let newRecipe = response.recipe {
+            recipes.insert(newRecipe, at: 0)
+        }
+    }
+}

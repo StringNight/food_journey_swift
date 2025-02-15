@@ -94,4 +94,20 @@ public enum FoodJourneyModels {
             self.new_password = new_password
         }
     }
-} 
+    
+    public struct RecipeCreate: Codable {
+            let title: String
+            let ingredients: [Ingredient]
+            let steps: [Step]
+            let nutrition: Nutrition
+            let cooking_time: Int
+            let difficulty: String
+            let tags: [String]?
+    }
+        
+    struct RecipeResponse: Codable {
+        let schema_version: String
+        let recipe: Recipe?
+    }
+
+}

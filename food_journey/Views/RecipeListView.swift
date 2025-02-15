@@ -6,6 +6,7 @@ struct RecipeListView: View {
     @State private var showingError = false
     @State private var errorMessage = ""
     @State private var isLoading = false
+    @State private var showingCreateRecipe = false  // Add this line
     
     private let columns = [
         GridItem(.flexible()),
@@ -18,6 +19,14 @@ struct RecipeListView: View {
                 if isLoading {
                     ProgressView()
                         .padding()
+                } else if recipeService.recipes.isEmpty {
+                    VStack {
+                        Spacer()
+                        Text("未获取到菜谱")
+                            .foregroundColor(.secondary)
+                            .padding()
+                        Spacer()
+                    }
                 } else {
                     LazyVGrid(columns: columns, spacing: 16) {
                         ForEach(recipeService.recipes) { recipe in
@@ -47,11 +56,14 @@ struct RecipeListView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
-                        // TODO: 添加新食谱
+                        showingCreateRecipe = true
                     }) {
                         Image(systemName: "plus")
                     }
                 }
+            }
+            .sheet(isPresented: $showingCreateRecipe) {
+                CreateRecipeView(isPresented: $showingCreateRecipe)
             }
         }
         .task {
@@ -143,4 +155,4 @@ struct RecipeCard: View {
 
 #Preview {
     RecipeListView()
-} 
+}
