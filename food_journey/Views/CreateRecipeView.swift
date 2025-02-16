@@ -38,6 +38,34 @@ struct CreateRecipeView: View {
         var fiber: String = ""
     }
     
+    private var validationMessage: String {
+        if title.isEmpty {
+            return "请填写菜谱名称"
+        }
+        if ingredients.filter({ !$0.name.isEmpty && !$0.amount.isEmpty }).isEmpty {
+            return "请至少添加一个食材（需要填写名称和用量）"
+        }
+        if steps.filter({ !$0.description.isEmpty }).isEmpty {
+            return "请至少添加一个烹饪步骤"
+        }
+        if cookingTime.isEmpty {
+            return "请填写烹饪时间"
+        }
+        if nutrition.calories.isEmpty {
+            return "请填写热量"
+        }
+        if nutrition.protein.isEmpty {
+            return "请填写蛋白质含量"
+        }
+        if nutrition.carbs.isEmpty {
+            return "请填写碳水化合物含量"
+        }
+        if nutrition.fat.isEmpty {
+            return "请填写脂肪含量"
+        }
+        return ""
+    }
+
     var body: some View {
         NavigationView {
             Form {
@@ -106,6 +134,7 @@ struct CreateRecipeView: View {
                         isPresented = false
                     }
                 }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("保存") {
                         Task {
@@ -113,6 +142,16 @@ struct CreateRecipeView: View {
                         }
                     }
                     .disabled(isLoading || !isValid)
+                    .help(validationMessage)  // 在 macOS 上显示提示
+                    .overlay {
+                        if !isValid {
+                            Text(validationMessage)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                                .offset(y: 30)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
                 }
             }
             .alert("错误", isPresented: $showingError) {
