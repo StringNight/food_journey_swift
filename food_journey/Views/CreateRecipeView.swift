@@ -141,6 +141,7 @@ struct CreateRecipeView: View {
                             await saveRecipe()
                         }
                     }
+                    
                     .disabled(isLoading || !isValid)
                     .help(validationMessage)  // 在 macOS 上显示提示
                     .overlay {
