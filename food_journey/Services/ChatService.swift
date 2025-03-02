@@ -13,6 +13,8 @@ class ChatService: ObservableObject {
     private var _audioPlayer: AVAudioPlayer?
     // 存储录音文件的本地路径映射
     private var localAudioFiles: [String: URL] = [:]
+    // 存储图片文件的本地路径映射
+    private var localImageFiles: [String: UIImage] = [:]
     
     var audioPlayer: AVAudioPlayer? {
         return _audioPlayer
@@ -71,17 +73,13 @@ class ChatService: ObservableObject {
     }
         
         // 发送图片消息
+        // 发送图片消息
         func sendImageMessage(_ image: UIImage) async throws -> Message {
-            let imageBase64 = try await networkService.transferImageToBase64(image)
-            let request = FoodJourneyModels.ChatImageRequest(file: imageBase64)
+            // 创建一个唯一标识符用于关联本地图片
+            let localImageId = UUID().uuidString
             
-            let response: FoodJourneyModels.MessageResponse = try await networkService.request(
-                endpoint: "/chat/image",
-                method: "POST",
-                body: try JSONEncoder().encode(request),
-                requiresAuth: true,
-                contentType: "multipart/form-data"
-            )
+            // 保存本地图片
+            localImageFiles[localImageId] = image
             
             let userMessage = Message(
                 id: UUID().uuidString,
@@ -89,18 +87,57 @@ class ChatService: ObservableObject {
                 content: "",
                 timestamp: Date(),
                 isUser: true,
-                imageBase64: imageBase64
+                imageBase64: nil,
+                localImage: image
             )
             
             let botMessage = Message(
                 id: UUID().uuidString,
                 type: .text,
-                content: response.message,
+                content: "",
                 timestamp: Date(),
                 isUser: false
             )
             
-            messages.append(contentsOf: [userMessage, botMessage])
+            await MainActor.run {
+                messages.append(contentsOf: [userMessage, botMessage])
+            }
+            
+            var accumulatedContent = ""
+            
+            // 使用 uploadImageAndStream 处理流式响应，修改端点为 /chat/image/stream
+            for try await streamData in try await networkService.uploadImageAndStream(
+                image,
+                endpoint: "/chat/image/stream"
+            ) {
+                switch streamData {
+                case .message(let message):
+                    accumulatedContent += message
+                    await MainActor.run {
+                        botMessage.content = accumulatedContent
+                        if let index = messages.firstIndex(where: { $0.id == botMessage.id }) {
+                            messages[index] = botMessage
+                        }
+                    }
+                case .history(let history):
+                    // 查找最后一条用户图片消息
+                    for historyMessage in history {
+                        if historyMessage.is_user && historyMessage.image_url != nil {
+                            await MainActor.run {
+                                // 更新用户消息的内容，但保留本地图片
+                                userMessage.content = historyMessage.content ?? ""
+                                // 不覆盖localImage，保持使用本地图片
+                                
+                                if let index = messages.firstIndex(where: { $0.id == userMessage.id }) {
+                                    messages[index] = userMessage
+                                }
+                            }
+                            break
+                        }
+                    }
+                }
+            }
+            
             return botMessage
         }
         
@@ -249,7 +286,7 @@ class ChatService: ObservableObject {
                     print("播放本地文件: \(fileURL.path)")
                     
                     do {
-                        // 配置音频会话
+                        // 配置音频会会话
                         let audioSession = AVAudioSession.sharedInstance()
                         try audioSession.setCategory(.playback, mode: .default)
                         try audioSession.setActive(true)
@@ -288,8 +325,9 @@ class ChatService: ObservableObject {
         // 清空消息历史
         func clearMessages() {
             messages.removeAll()
-            // 同时清空本地音频文件映射
+            // 同时清空本地音频和图片文件映射
             localAudioFiles.removeAll()
+            localImageFiles.removeAll()
         }
     }
 

@@ -174,8 +174,17 @@ struct MessageView: View {
                         .animation(.easeInOut(duration: 0.2), value: message.content) // 添加平滑动画
                         .transition(.opacity) // 添加过渡效果
                 
+                // 在MessageView中修改图片显示部分
                 case .image:
-                    if let imageUrl = message.imageUrl {
+                    if let localImage = message.localImage {
+                        // 优先使用本地图片
+                        Image(uiImage: localImage)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxWidth: 200)
+                            .cornerRadius(16)
+                    } else if let imageUrl = message.imageUrl {
+                        // 如果没有本地图片，则使用URL加载
                         AsyncImage(url: URL(string: imageUrl)) { phase in
                             switch phase {
                             case .empty:

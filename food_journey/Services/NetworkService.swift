@@ -333,6 +333,100 @@ class NetworkService {
         }
     }
     
+    func uploadImageAndStream(_ image: UIImage, endpoint: String) async throws -> AsyncStream<StreamData> {
+    // 将图片转换为JPEG数据
+    guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+        throw NetworkError.invalidResponse
+    }
+    
+    // 创建请求
+    guard let url = URL(string: baseURL + endpoint) else {
+        throw NetworkError.invalidURL
+    }
+    
+    // 创建一个唯一的边界字符串
+    let boundary = "Boundary-\(UUID().uuidString)"
+    
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+    
+    // 添加认证头
+    if let token = UserDefaults.standard.string(forKey: "auth_token") {
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    }
+    
+    // 构建请求体
+    var body = Data()
+    
+    // 添加文件数据
+    body.append("--\(boundary)\r\n".data(using: .utf8)!)
+    body.append("Content-Disposition: form-data; name=\"file\"; filename=\"image.jpg\"\r\n".data(using: .utf8)!)
+    body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+    body.append(imageData)
+    body.append("\r\n".data(using: .utf8)!)
+    
+    // 添加可选的caption字段
+    body.append("--\(boundary)\r\n".data(using: .utf8)!)
+    body.append("Content-Disposition: form-data; name=\"caption\"\r\n\r\n".data(using: .utf8)!)
+    body.append("".data(using: .utf8)!) // 空caption
+    body.append("\r\n".data(using: .utf8)!)
+    
+    // 结束boundary
+    body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+    
+    // 设置请求体
+    request.httpBody = body
+    
+    // 直接使用请求对象发送请求，而不是通过streamRequest方法
+    return AsyncStream<StreamData> { continuation in
+        Task {
+            do {
+                // 发送请求并处理流式响应
+                let (bytes, _) = try await URLSession.shared.bytes(for: request)
+                
+                for try await line in bytes.lines {
+                    print("接收到数据行: \(line)")
+                    
+                    // 确保行以 "data:" 开头
+                    guard line.hasPrefix("data:") else { continue }
+                    
+                    // 提取 JSON 部分
+                    let jsonString = line.dropFirst("data:".count).trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !jsonString.isEmpty else { continue }
+                    
+                    // 解析 JSON
+                    if let data = jsonString.data(using: .utf8) {
+                        do {
+                            let json = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
+                            
+                            if let type = json?["type"] as? String {
+                                if type == "message", let messageData = json?["data"] as? String {
+                                    // 处理消息类型
+                                    continuation.yield(.message(messageData))
+                                } else if type == "history", let historyData = json?["data"] as? [[String: Any]] {
+                                    // 将 history 数组转换为 JSON Data
+                                    let historyJson = try JSONSerialization.data(withJSONObject: historyData, options: [])
+                                    // 解码为 [ChatHistory]
+                                    let histories = try JSONDecoder().decode([ChatHistory].self, from: historyJson)
+                                    continuation.yield(.history(histories))
+                                }
+                            }
+                        } catch {
+                            print("JSON 解析错误: \(error.localizedDescription)")
+                        }
+                    }
+                }
+                
+                continuation.finish()
+            } catch {
+                print("上传图片并获取流式响应失败: \(error.localizedDescription)")
+                continuation.finish()
+            }
+        }
+    }
+}
+    
     func transferImageToBase64(_ image: UIImage) async throws -> String {
         guard let base64String = image.jpegData(compressionQuality: 1)?.base64EncodedString() else {
             throw NetworkError.serverError("图片处理失败")
