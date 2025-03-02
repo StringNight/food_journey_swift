@@ -42,6 +42,84 @@ public enum FoodJourneyModels {
         }
     }
 
+    // 添加更新响应模型
+    public struct UpdateResponse: Codable {
+        public let schema_version: String
+        public let message: String
+        public let updated_fields: [String]?
+        
+        enum CodingKeys: String, CodingKey {
+            case schema_version = "schema_version"
+            case message
+            case updated_fields = "updated_fields"
+        }
+    }
+
+    // 添加运动记录响应模型
+    public struct ExerciseSet: Codable {
+        public let reps: Int
+        public let weight: Double?
+        public let duration: Int?
+        public let distance: Double?
+    }
+    
+    public struct ExerciseResponse: Codable {
+        public let id: String
+        public let user_id: String
+        public let exercise_name: String
+        public let exercise_type: String
+        public let sets: [ExerciseSet]
+        public let calories_burned: Double?
+        public let notes: String?
+        public let recorded_at: String
+        public let created_at: String
+        public let updated_at: String
+        
+        enum CodingKeys: String, CodingKey {
+            case id, user_id, exercise_name, exercise_type, sets
+            case calories_burned = "calories_burned"
+            case notes, recorded_at, created_at, updated_at
+        }
+    }
+
+    // 添加饮食记录响应模型
+    public struct FoodItem: Codable {
+        public let food_name: String
+        public let portion: Double
+        public let calories: Double
+        public let protein: Double?
+        public let carbs: Double?
+        public let fat: Double?
+        
+        enum CodingKeys: String, CodingKey {
+            case food_name = "food_name"
+            case portion
+            case calories
+            case protein
+            case carbs
+            case fat
+        }
+    }
+    
+    public struct MealResponse: Codable {
+        public let id: String
+        public let user_id: String
+        public let meal_type: String
+        public let food_items: [FoodItem]
+        public let total_calories: Double
+        public let notes: String?
+        public let recorded_at: String
+        public let created_at: String
+        public let updated_at: String
+        
+        enum CodingKeys: String, CodingKey {
+            case id, user_id, meal_type
+            case food_items = "food_items"
+            case total_calories = "total_calories"
+            case notes, recorded_at, created_at, updated_at
+        }
+    }
+
     // MARK: - 请求模型
     public struct ChatTextRequest: Codable {
         public let message: String

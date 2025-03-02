@@ -25,6 +25,8 @@ class RecipeService: ObservableObject {
         }
     }
     
+    /// 获取所有菜谱信息
+    /// 通过访问 "/recipes" 接口来获取菜谱数据，用户需已认证
     func fetchRecipes() async throws {
         let response: RecipeResponse = try await networkService.request(
             endpoint: "/recipes",
@@ -33,6 +35,8 @@ class RecipeService: ObservableObject {
         recipes = response.recipes
     }
     
+    /// 获取用户收藏的菜谱
+    /// 通过访问 "/favorites" 接口来获取收藏的菜谱数据，用户需已认证
     func fetchFavoriteRecipes() async throws {
         let response: [Recipe] = try await networkService.request(
             endpoint: "/favorites",
@@ -41,6 +45,8 @@ class RecipeService: ObservableObject {
         favoriteRecipes = response
     }
     
+    /// 搜索菜谱
+    /// 根据传入的查询关键字调用 "/recipes/search" 接口返回搜索结果
     func searchRecipes(query: String, page: Int = 1, limit: Int = 20) async throws {
         guard !query.isEmpty else {
             searchResults = []
@@ -63,6 +69,8 @@ class RecipeService: ObservableObject {
         }
     }
     
+    /// 将菜谱加入收藏
+    /// 通过 POST 请求 "/recipes/{recipeId}/favorite" 接口将菜谱添加到用户收藏中
     func addToFavorites(recipeId: String) async throws {
         let _: FoodJourneyModels.EmptyResponse = try await networkService.request(
             endpoint: "/recipes/\(recipeId)/favorite",
@@ -75,6 +83,8 @@ class RecipeService: ObservableObject {
         }
     }
     
+    /// 从收藏中移除菜谱
+    /// 通过 DELETE 请求 "/recipes/{recipeId}/favorite" 接口来移除用户收藏中的菜谱
     func removeFromFavorites(recipeId: String) async throws {
         let _: FoodJourneyModels.EmptyResponse = try await networkService.request(
             endpoint: "/recipes/\(recipeId)/favorite",
@@ -85,6 +95,8 @@ class RecipeService: ObservableObject {
         favoriteRecipes.removeAll { $0.id == recipeId }
     }
     
+    /// 对菜谱进行评分
+    /// 通过 POST 请求 "/recipes/{recipeId}/rate" 接口提交用户评分及评论
     func rateRecipe(recipeId: String, rating: Int, comment: String?) async throws {
         let ratingData = FoodJourneyModels.RecipeRatingRequest(rating: rating, comment: comment)
         let _: FoodJourneyModels.EmptyResponse = try await networkService.request(
@@ -95,6 +107,8 @@ class RecipeService: ObservableObject {
         )
     }
     
+    /// 创建新菜谱
+    /// 通过 POST 请求 "/recipes" 接口创建新的菜谱，成功后会将新菜谱插入本地列表
     func createRecipe(_ recipe: FoodJourneyModels.RecipeCreate) async throws {
         let response: FoodJourneyModels.RecipeResponse = try await networkService.request(
             endpoint: "/recipes",

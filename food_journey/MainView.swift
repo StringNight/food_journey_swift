@@ -15,10 +15,10 @@ struct MainView: View {
                     }
                     
                     NavigationView {
-                        RecipeListView()
+                        HealthTrackView()
                     }
                     .tabItem {
-                        Label("食谱", systemImage: "book.fill")
+                        Label("健身追踪", systemImage: "heart.fill")
                     }
                     
                     NavigationView {
