@@ -10,7 +10,13 @@ class ChatService: ObservableObject {
     @Published var messages: [Message] = []
     @Published var isRecording = false
     private var audioRecorder: AVAudioRecorder?
-    private var audioPlayer: AVAudioPlayer?
+    private var _audioPlayer: AVAudioPlayer?
+    // 存储录音文件的本地路径映射
+    private var localAudioFiles: [String: URL] = [:]
+    
+    var audioPlayer: AVAudioPlayer? {
+        return _audioPlayer
+    }
     
     private init() {}
     
@@ -130,13 +136,19 @@ class ChatService: ObservableObject {
             let audioUrl = recorder.url
             let audioData = try Data(contentsOf: audioUrl)
             
+            // 创建一个唯一标识符用于关联本地文件
+            let localFileId = UUID().uuidString
+            
+            // 保存本地文件路径
+            localAudioFiles[localFileId] = audioUrl
+            
             let userMessage = Message(
                 id: UUID().uuidString,
                 type: .voice,
                 content: "",  // 将由语音识别结果填充
                 timestamp: Date(),
                 isUser: true,
-                voiceUrl: nil  // 将由服务器返回的 URL 填充
+                voiceUrl: localFileId  // 使用本地文件ID而不是服务器URL
             )
             
             let botMessage = Message(
@@ -174,9 +186,9 @@ class ChatService: ObservableObject {
                     for historyMessage in history {
                         if historyMessage.is_user && historyMessage.voice_url != nil {
                             await MainActor.run {
-                                // 更新用户消息的内容和语音URL
+                                // 更新用户消息的内容，但保留本地文件ID作为voiceUrl
                                 userMessage.content = historyMessage.transcribed_text ?? ""
-                                userMessage.voiceUrl = historyMessage.voice_url
+                                // 不覆盖voiceUrl，保持使用本地文件ID
                                 
                                 if let index = messages.firstIndex(where: { $0.id == userMessage.id }) {
                                     messages[index] = userMessage
@@ -193,11 +205,77 @@ class ChatService: ObservableObject {
         
         // 播放语音消息
         func playVoiceMessage(url: String) async throws {
-            guard let url = URL(string: url) else { return }
-            
-            let (data, _) = try await URLSession.shared.data(from: url)
-            audioPlayer = try AVAudioPlayer(data: data)
-            audioPlayer?.play()
+            // 检查是否是本地文件ID
+            if let localFileURL = localAudioFiles[url] {
+                // 播放本地文件
+                print("播放本地录音文件: \(localFileURL.path)")
+                
+                do {
+                    // 配置音频会话
+                    let audioSession = AVAudioSession.sharedInstance()
+                    try audioSession.setCategory(.playback, mode: .default)
+                    try audioSession.setActive(true)
+                    
+                    // 创建并配置音频播放器
+                    _audioPlayer = try AVAudioPlayer(contentsOf: localFileURL)
+                    _audioPlayer?.prepareToPlay()
+                    _audioPlayer?.volume = 1.0
+                    
+                    // 播放音频
+                    if let player = _audioPlayer, player.play() {
+                        print("本地音频开始播放")
+                    } else {
+                        print("本地音频播放失败")
+                        throw NSError(domain: "ChatService", code: 1002, userInfo: [NSLocalizedDescriptionKey: "音频播放失败"])
+                    }
+                } catch {
+                    print("本地音频播放错误: \(error.localizedDescription)")
+                    throw error
+                }
+            } else {
+                // 如果不是本地文件ID，尝试作为文件路径处理
+                if url.hasPrefix("/") || url.hasPrefix("file://") {
+                    // 本地文件路径
+                    let fileURL: URL
+                    if url.hasPrefix("file://") {
+                        guard let urlObj = URL(string: url) else {
+                            throw NSError(domain: "ChatService", code: 1001, userInfo: [NSLocalizedDescriptionKey: "无效的文件URL"])
+                        }
+                        fileURL = urlObj
+                    } else {
+                        fileURL = URL(fileURLWithPath: url)
+                    }
+                    
+                    print("播放本地文件: \(fileURL.path)")
+                    
+                    do {
+                        // 配置音频会话
+                        let audioSession = AVAudioSession.sharedInstance()
+                        try audioSession.setCategory(.playback, mode: .default)
+                        try audioSession.setActive(true)
+                        
+                        // 创建并配置音频播放器
+                        _audioPlayer = try AVAudioPlayer(contentsOf: fileURL)
+                        _audioPlayer?.prepareToPlay()
+                        _audioPlayer?.volume = 1.0
+                        
+                        // 播放音频
+                        if let player = _audioPlayer, player.play() {
+                            print("本地音频开始播放")
+                        } else {
+                            print("本地音频播放失败")
+                            throw NSError(domain: "ChatService", code: 1002, userInfo: [NSLocalizedDescriptionKey: "音频播放失败"])
+                        }
+                    } catch {
+                        print("本地音频播放错误: \(error.localizedDescription)")
+                        throw error
+                    }
+                } else {
+                    // 作为远程URL处理（保留原有逻辑，以防需要）
+                    print("尝试播放远程音频: \(url)")
+                    throw NSError(domain: "ChatService", code: 1003, userInfo: [NSLocalizedDescriptionKey: "不支持播放远程音频"])
+                }
+            }
         }
         
         // 取消录音
@@ -210,6 +288,8 @@ class ChatService: ObservableObject {
         // 清空消息历史
         func clearMessages() {
             messages.removeAll()
+            // 同时清空本地音频文件映射
+            localAudioFiles.removeAll()
         }
     }
 

@@ -225,10 +225,19 @@ struct MessageView: View {
         do {
             isPlayingVoice = true
             try await chatService.playVoiceMessage(url: url)
+            
+            // 等待音频播放完成
+            if let player = chatService.audioPlayer {
+                // 添加一个延迟，等待音频播放完成
+                let duration = player.duration
+                try await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+            }
+            
             isPlayingVoice = false
         } catch {
             isPlayingVoice = false
-            print("播放语音失败: \(error)")
+            print("播放语音失败: \(error.localizedDescription)")
+            // 可以在这里添加一个提示，告诉用户播放失败
         }
     }
 }

@@ -3,7 +3,7 @@ import UIKit
 
 class NetworkService {
     static let shared = NetworkService()
-    private let baseURL = "https://infsols.com:8000/api/v1"
+    let baseURL = "https://infsols.com:8000/api/v1"  // 从 private 改为 public
     
     private init() {
         dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
