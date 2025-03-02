@@ -233,7 +233,7 @@ class NetworkService {
         
         request.httpBody = body
         print(body)
-
+        
         let (responseData, response) = try await URLSession.shared.data(for: request)
         
         if let httpResponse = response as? HTTPURLResponse,
@@ -248,6 +248,89 @@ class NetworkService {
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         print("Response Data: \(String(data: responseData, encoding:.utf8)!)")
         return try decoder.decode(FoodJourneyModels.AudioUploadResponse.self, from: responseData)
+    }
+    
+    func uploadAudioAndStream(
+        _ audioData: Data,
+        filename: String,
+        endpoint: String,
+        requiresAuth: Bool = true
+    ) async throws -> AsyncStream<StreamData> {
+        return AsyncStream<StreamData> { continuation in
+            Task {
+                do {
+                    guard let url = URL(string: baseURL + endpoint) else {
+                        throw NetworkError.invalidURL
+                    }
+                    
+                    // 创建 multipart/form-data 请求
+                    var request = URLRequest(url: url)
+                    request.httpMethod = "POST"
+                    
+                    let boundary = "Boundary-\(UUID().uuidString)"
+                    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+                    
+                    if requiresAuth {
+                        if let token = UserDefaults.standard.string(forKey: "auth_token") {
+                            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                        }
+                    }
+                    
+                    // 构建请求体
+                    var body = Data()
+                    
+                    // 添加文件数据
+                    body.append("\r\n--\(boundary)\r\n".data(using: .utf8)!)
+                    body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
+                    body.append("Content-Type: audio/m4a\r\n\r\n".data(using: .utf8)!)
+                    body.append(audioData)
+                    body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+                    
+                    request.httpBody = body
+                    
+                    // 发送请求并处理流式响应
+                    let (bytes, _) = try await URLSession.shared.bytes(for: request)
+                    
+                    for try await line in bytes.lines {
+                        print("接收到数据行: \(line)")
+                        
+                        // 确保行以 "data:" 开头
+                        guard line.hasPrefix("data:") else { continue }
+                        
+                        // 提取 JSON 部分
+                        let jsonString = line.dropFirst("data:".count).trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !jsonString.isEmpty else { continue }
+                        
+                        // 解析 JSON
+                        if let data = jsonString.data(using: .utf8) {
+                            do {
+                                let json = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
+                                
+                                if let type = json?["type"] as? String {
+                                    if type == "message", let messageData = json?["data"] as? String {
+                                        // 处理消息类型
+                                        continuation.yield(.message(messageData))
+                                    } else if type == "history", let historyData = json?["data"] as? [[String: Any]] {
+                                        // 将 history 数组转换为 JSON Data
+                                        let historyJson = try JSONSerialization.data(withJSONObject: historyData, options: [])
+                                        // 解码为 [ChatHistory]
+                                        let histories = try JSONDecoder().decode([ChatHistory].self, from: historyJson)
+                                        continuation.yield(.history(histories))
+                                    }
+                                }
+                            } catch {
+                                print("JSON 解析错误: \(error.localizedDescription)")
+                            }
+                        }
+                    }
+                    
+                    continuation.finish()
+                } catch {
+                    print("上传音频并获取流式响应失败: \(error.localizedDescription)")
+                    continuation.finish()
+                }
+            }
+        }
     }
     
     func transferImageToBase64(_ image: UIImage) async throws -> String {
@@ -265,7 +348,7 @@ class NetworkService {
         let image_url: String?
         let transcribed_text: String?
     }
-
+    
     /// 流式响应中可能的数据类型
     enum StreamData {
         case message(String)
@@ -302,6 +385,8 @@ class NetworkService {
     
     
     
+    // 修改 streamRequest 方法，参考文本消息处理的方式
+    // 修改 streamRequest 方法，使用最简单直接的方式处理流式数据
     func streamRequest(
         endpoint: String,
         method: String = "GET",
@@ -309,7 +394,7 @@ class NetworkService {
         requiresAuth: Bool = false,
         contentType: String = "application/json"
     ) async throws -> AsyncStream<StreamData> {
-        return AsyncStream<StreamData> { (continuation: AsyncStream<StreamData>.Continuation) in
+        return AsyncStream<StreamData> { continuation in
             Task {
                 do {
                     guard let url = URL(string: baseURL + endpoint) else {
@@ -334,43 +419,60 @@ class NetworkService {
                     }
                     
                     let (bytes, _) = try await URLSession.shared.bytes(for: request)
-                    print("Received bytes: \(bytes)")
-                    
-                    // let (data, response) = try await URLSession.shared.data(for: request)
-                    
                     
                     for try await line in bytes.lines {
-                        print("Received line: \(line)")
-                        guard line.hasPrefix("data:") else { continue }
-                        let jsonPart = line.dropFirst("data:".count).trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !jsonPart.isEmpty else { continue }
+                        print("接收到数据行: \(line)")
                         
-                        print("Received JSON part: \(jsonPart)")
-                        if let streamData = parseStreamData(from: String(jsonPart)) {
-                            print("Parsed StreamData: \(streamData)")
-                            continuation.yield(streamData)
+                        // 确保行以 "data:" 开头
+                        guard line.hasPrefix("data:") else { continue }
+                        
+                        // 提取 JSON 部分
+                        let jsonString = line.dropFirst("data:".count).trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !jsonString.isEmpty else { continue }
+                        
+                        // 解析 JSON
+                        if let data = jsonString.data(using: .utf8) {
+                            do {
+                                let json = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
+                                
+                                if let type = json?["type"] as? String {
+                                    if type == "message", let messageData = json?["data"] as? String {
+                                        // 处理消息类型
+                                        continuation.yield(.message(messageData))
+                                    } else if type == "history", let historyData = json?["data"] as? [[String: Any]] {
+                                        // 将 history 数组转换为 JSON Data
+                                        let historyJson = try JSONSerialization.data(withJSONObject: historyData, options: [])
+                                        // 解码为 [ChatHistory]
+                                        let histories = try JSONDecoder().decode([ChatHistory].self, from: historyJson)
+                                        continuation.yield(.history(histories))
+                                    }
+                                }
+                            } catch {
+                                print("JSON 解析错误: \(error.localizedDescription), 原始数据: \(jsonString)")
+                            }
                         }
                     }
                     
                     continuation.finish()
                 } catch {
+                    print("流请求错误: \(error.localizedDescription)")
                     continuation.finish()
                 }
             }
         }
     }
+    
+    enum NetworkError: Error {
+        case invalidURL
+        case invalidResponse
+        case noData
+        case serverError(String)
+        case decodingError(String)
+    }
+    
+    //extension FoodJourneyModels {
+    //    struct ChatRequest: Codable {
+    //        let message: String
+    //    }
+    //}
 }
-
-enum NetworkError: Error {
-    case invalidURL
-    case invalidResponse
-    case noData
-    case serverError(String)
-    case decodingError(String)
-}
-
-//extension FoodJourneyModels {
-//    struct ChatRequest: Codable {
-//        let message: String
-//    }
-//}

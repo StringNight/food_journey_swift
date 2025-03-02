@@ -120,6 +120,7 @@ class ChatService: ObservableObject {
         }
         
         // 停止录音并发送
+        // 停止录音并发送
         func stopRecordingAndSend() async throws -> Message? {
             guard let recorder = audioRecorder else { return nil }
             
@@ -129,40 +130,64 @@ class ChatService: ObservableObject {
             let audioUrl = recorder.url
             let audioData = try Data(contentsOf: audioUrl)
             
-            // 上传音频文件
-            let uploadResponse = try await networkService.uploadAudio(
-                audioData,
-                filename: audioUrl.lastPathComponent,
-                endpoint: "/chat/voice"
-            )
-            
-            // 发送语音识别请求
-            let request = FoodJourneyModels.ChatVoiceRequest(voice_url: uploadResponse.url)
-            let response: FoodJourneyModels.MessageResponse = try await networkService.request(
-                endpoint: "/chat/voice/transcribe",
-                method: "POST",
-                body: try JSONEncoder().encode(request),
-                requiresAuth: true
-            )
-            
             let userMessage = Message(
                 id: UUID().uuidString,
                 type: .voice,
-                content: response.message,
+                content: "",  // 将由语音识别结果填充
                 timestamp: Date(),
                 isUser: true,
-                voiceUrl: uploadResponse.url
+                voiceUrl: nil  // 将由服务器返回的 URL 填充
             )
             
             let botMessage = Message(
                 id: UUID().uuidString,
                 type: .text,
-                content: response.message,
+                content: "",
                 timestamp: Date(),
                 isUser: false
             )
             
-            messages.append(contentsOf: [userMessage, botMessage])
+            await MainActor.run {
+                messages.append(contentsOf: [userMessage, botMessage])
+            }
+            
+            // 直接发送语音文件并获取流式响应
+            var accumulatedContent = ""
+            
+            // 使用 multipart/form-data 上传语音文件
+            for try await streamData in try await networkService.uploadAudioAndStream(
+                audioData,
+                filename: audioUrl.lastPathComponent,
+                endpoint: "/chat/voice"
+            ) {
+                switch streamData {
+                case .message(let message):
+                    accumulatedContent += message
+                    await MainActor.run {
+                        botMessage.content = accumulatedContent
+                        if let index = messages.firstIndex(where: { $0.id == botMessage.id }) {
+                            messages[index] = botMessage
+                        }
+                    }
+                case .history(let history):
+                    // 查找最后一条用户语音消息
+                    for historyMessage in history {
+                        if historyMessage.is_user && historyMessage.voice_url != nil {
+                            await MainActor.run {
+                                // 更新用户消息的内容和语音URL
+                                userMessage.content = historyMessage.transcribed_text ?? ""
+                                userMessage.voiceUrl = historyMessage.voice_url
+                                
+                                if let index = messages.firstIndex(where: { $0.id == userMessage.id }) {
+                                    messages[index] = userMessage
+                                }
+                            }
+                            break
+                        }
+                    }
+                }
+            }
+            
             return botMessage
         }
         
