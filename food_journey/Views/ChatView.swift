@@ -23,6 +23,11 @@ struct ChatView: View {
                     .padding()
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity) // 添加这行
+                .contentShape(Rectangle()) // 添加这行，确保整个区域可点击
+                .onTapGesture {
+                    // 点击空白区域时隐藏键盘
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                }
                 .onChange(of: chatService.messages.count) { _ in
                     if let lastMessage = chatService.messages.last {
                         withAnimation {
@@ -184,7 +189,7 @@ struct MessageView: View {
             
             // 消息气泡
             messageContent
-                .frame(maxWidth: UIScreen.main.bounds.width * 0.8, alignment: message.isUser ? .trailing : .leading)
+                .frame(maxWidth: UIScreen.main.bounds.width * 0.82, alignment: message.isUser ? .trailing : .leading)
                 .scaleEffect(isAnimated ? 1.0 : (message.isUser ? 0.8 : 1.0)) // 用户消息有缩放效果
                 .opacity(isAnimated ? 1.0 : (message.isUser ? 0.0 : 1.0)) // 用户消息有透明度效果
                 .offset(x: isAnimated ? 0 : (message.isUser ? 20 : 0)) // 用户消息有位移效果
@@ -196,6 +201,11 @@ struct MessageView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: message.isUser ? .trailing : .leading)
+        .contentShape(Rectangle()) // 添加这行，确保整个区域可点击
+        .onTapGesture {
+            // 点击消息时隐藏键盘
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        }
         .onAppear {
             // 仅对用户消息应用动画
             if message.isUser {
@@ -262,12 +272,13 @@ struct MessageView: View {
                             Image(systemName: isPlayingVoice ? "stop.circle.fill" : "play.circle.fill")
                             Text(message.content)
                         }
-                        .padding()
-                        .background(message.isUser ? Color.blue : Color.gray.opacity(0.2))
-                        .foregroundColor(message.isUser ? .white : .primary)
-                        .cornerRadius(16)
-                        .frame(maxWidth: UIScreen.main.bounds.width * 0.8) // 限制语音消息宽度
                     }
+                    .padding()
+                    .background(message.isUser ? Color.blue : Color.gray.opacity(0.2))
+                    .foregroundColor(message.isUser ? .white : .primary)
+                    .cornerRadius(16)
+                    .animation(.easeInOut(duration: 0.2), value: message.content)
+                    .transition(.opacity)
                     .shadow(color: message.isUser ? Color.blue.opacity(0.3) : Color.gray.opacity(0.2), radius: 3, x: 0, y: 2)
                 }
             }

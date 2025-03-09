@@ -165,7 +165,7 @@ struct LoginView: View {
         defer { isLoading = false }
         
         do {
-            try await authService.loginWithBiometrics()
+            try await authService.loginWithBiometric()
         } catch {
             showError = true
             errorMessage = error.localizedDescription
@@ -210,4 +210,4 @@ struct LoginView: View {
 
 #Preview {
     LoginView()
-} 
+}

@@ -43,7 +43,8 @@ class AuthService: ObservableObject {
         }
     }
     
-    func loginWithBiometrics() async throws {
+    // 将 loginWithBiometrics 改为 loginWithBiometric 以匹配调用
+    func loginWithBiometric() async throws {
         guard !rememberedUsername.isEmpty else {
             throw AuthError.noBiometricCredentials
         }
@@ -170,6 +171,11 @@ class AuthService: ObservableObject {
     // 缓存头像的方法
     func cacheAvatar(_ image: UIImage, for url: String) {
         cachedAvatars[url] = image
+    }
+    
+    // 添加一个公共方法来检查是否有保存的凭证
+    func hasSavedCredentials() -> Bool {
+        return !rememberedUsername.isEmpty
     }
 }
 

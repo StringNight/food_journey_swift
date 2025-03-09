@@ -30,29 +30,39 @@ struct AccountView: View {
                                 .padding(.horizontal)
                             
                             VStack(spacing: 0) {
-                                if BiometricAuthUtil.shared.biometricType != .none {
-                                    HStack {
-                                        Label(
-                                            BiometricAuthUtil.shared.biometricType == .faceID ? "使用 Face ID" : "使用 Touch ID",
-                                            systemImage: BiometricAuthUtil.shared.biometricType == .faceID ? "faceid" : "touchid"
-                                        )
-                                        Spacer()
-                                        Toggle("", isOn: $useBiometric)
-                                    }
-                                    .padding()
-                                    .background(Color(.secondarySystemGroupedBackground))
-                                    Divider()
-                                }
-                                
                                 NavigationLink(destination: ChangePasswordView()) {
-                                    HStack {
-                                        Label("修改密码", systemImage: "lock")
+                                    HStack(alignment: .center) {
+                                        Image(systemName: "lock")
+                                            .frame(width: 20)
+                                            .foregroundColor(.blue)
+                                        Text("修改密码")
+                                            .padding(.leading, 5)
                                         Spacer()
                                         Image(systemName: "chevron.right")
                                             .foregroundColor(.gray)
                                     }
                                     .padding()
                                     .background(Color(.secondarySystemGroupedBackground))
+                                }
+
+                                if BiometricAuthUtil.shared.biometricType != .none {
+                                    HStack(alignment: .center) {
+                                        Image(systemName: BiometricAuthUtil.shared.biometricType == .faceID ? "faceid" : "touchid")
+                                            .frame(width: 20)
+                                            .foregroundColor(.blue)
+                                        Text(BiometricAuthUtil.shared.biometricType == .faceID ? "使用 Face ID" : "使用 Touch ID")
+                                            .padding(.leading, 5)
+                                        Spacer()
+                                        // 移除这里错误放置的方法定义
+                                        Toggle("", isOn: $useBiometric)
+                                    }
+                                    .padding()
+                                    .background(Color(.secondarySystemGroupedBackground))
+                                    // 将 onChange 移到外面，减少嵌套层级
+                                    .onChange(of: useBiometric) { newValue in
+                                        handleBiometricToggle(newValue)
+                                    }
+                                    Divider()
                                 }
                             }
                             .background(Color(.secondarySystemGroupedBackground))
@@ -126,6 +136,19 @@ struct AccountView: View {
     
     private func logout() {
         authService.logout()
+    }
+    
+    // 添加这个方法
+    private func handleBiometricToggle(_ newValue: Bool) {
+        if newValue {
+            // 当开启生物识别时，确保有保存的凭证
+            if !authService.hasSavedCredentials() {
+                // 如果没有保存的凭证，提示用户先使用"记住我"登录
+                showError = true
+                errorMessage = "请先使用记住我选项登录，再开启生物识别"
+                useBiometric = false
+            }
+        }
     }
 }
 
