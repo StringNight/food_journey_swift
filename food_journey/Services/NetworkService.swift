@@ -37,34 +37,19 @@ class NetworkService: NSObject, URLSessionDelegate {
     }
     
     // 实现URLSessionDelegate方法，允许接受自签名证书
-    func urlSession(
-        _ session: URLSession,
-        didReceive challenge: URLAuthenticationChallenge,
-        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
-    ) {
-        print("收到SSL证书验证挑战: \(challenge.protectionSpace.host)")
-        
-        // 在开发环境中接受所有证书
-        #if DEBUG
-        if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust {
-            if let serverTrust = challenge.protectionSpace.serverTrust {
-                print("开发环境: 接受自签名证书: \(challenge.protectionSpace.host)")
-                // 配置评估选项
-                let policies = [SecPolicyCreateSSL(true, challenge.protectionSpace.host as CFString)]
-                SecTrustSetPolicies(serverTrust, policies as CFTypeRef)
-                
-                // 创建证书
-                let credential = URLCredential(trust: serverTrust)
-                completionHandler(.useCredential, credential)
-                return
-            }
-        }
-        #endif
-        
-        // 默认处理
-        completionHandler(.performDefaultHandling, nil)
+    // 在NetworkService类中添加或修改URLSessionDelegate方法
+    func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+    // 检查服务器域名是否是我们的开发服务器
+    if let serverTrust = challenge.protectionSpace.serverTrust,
+       challenge.protectionSpace.host == "infsols.com" {
+        print("接受自签名证书: \(challenge.protectionSpace.host)")
+        let credential = URLCredential(trust: serverTrust)
+        completionHandler(.useCredential, credential)
+    } else {
+    // 对于其他域名，使用默认处理
+    completionHandler(.performDefaultHandling, nil)
     }
-    
+    }
     func request<T: Codable>(
         endpoint: String,
         method: String = "GET",
@@ -232,10 +217,13 @@ class NetworkService: NSObject, URLSessionDelegate {
         )
     }
     
+    // 修改上传文件方法，适配后端返回的用户信息格式
     private func uploadFile(_ fileData: Data, filename: String, mimeType: String, endpoint: String) async throws -> String {
         guard let url = URL(string: baseURL + endpoint) else {
             throw NetworkError.invalidURL
         }
+        
+        print("准备上传文件到: \(url.absoluteString)")
         
         let boundary = UUID().uuidString
         var request = URLRequest(url: url)
@@ -244,6 +232,9 @@ class NetworkService: NSObject, URLSessionDelegate {
         
         if let token = UserDefaults.standard.string(forKey: "auth_token") {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            print("已添加认证令牌")
+        } else {
+            print("警告: 未找到认证令牌")
         }
         
         var body = Data()
@@ -258,24 +249,93 @@ class NetworkService: NSObject, URLSessionDelegate {
         
         request.httpBody = body
         
-        let (responseData, response) = try await session.data(for: request)
+        print("开始上传文件，请求体大小: \(body.count) 字节")
         
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw NetworkError.serverError("上传失败")
+        do {
+            let (responseData, response) = try await session.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                print("无效的HTTP响应")
+                throw NetworkError.invalidResponse
+            }
+            
+            print("收到HTTP响应，状态码: \(httpResponse.statusCode)")
+            
+            if !(200...299).contains(httpResponse.statusCode) {
+                if let responseString = String(data: responseData, encoding: .utf8) {
+                    print("错误响应内容: \(responseString)")
+                }
+                throw NetworkError.serverError("上传失败，状态码: \(httpResponse.statusCode)")
+            }
+            
+            // 打印响应内容，帮助调试
+            if let responseString = String(data: responseData, encoding: .utf8) {
+                print("响应内容: \(responseString)")
+            }
+            
+            // 尝试解析为UserProfile格式（与后端auth.py中的avatar端点返回格式匹配）
+            do {
+                let decoder = JSONDecoder()
+                decoder.keyDecodingStrategy = .convertFromSnakeCase
+                decoder.dateDecodingStrategy = .iso8601
+                
+                // 解析为包含用户信息的响应，使用已定义的UserProfile结构体
+                let userResponse: FoodJourneyModels.UserProfile = try decoder.decode(FoodJourneyModels.UserProfile.self, from: responseData)
+                if let avatarUrl = userResponse.avatar_url {
+                    print("成功解析用户响应，头像URL: \(avatarUrl)")
+                    return avatarUrl
+                } else {
+                    print("用户响应中没有头像URL")
+                    throw NetworkError.decodingError("用户响应中没有头像URL")
+                }
+            } catch {
+                print("解析为UserProfile失败: \(error.localizedDescription)")
+                
+                // 尝试解析为简单的JSON对象
+                if let json = try? JSONSerialization.jsonObject(with: responseData, options: []) as? [String: Any] {
+                    // 尝试从用户对象中获取avatar_url
+                    if let user = json["user"] as? [String: Any],
+                       let avatarUrl = user["avatar_url"] as? String {
+                        print("从JSON中获取到头像URL: \(avatarUrl)")
+                        return avatarUrl
+                    }
+                    
+                    // 直接尝试获取avatar_url
+                    if let avatarUrl = json["avatar_url"] as? String {
+                        print("从JSON中获取到头像URL: \(avatarUrl)")
+                        return avatarUrl
+                    }
+                    
+                    print("JSON中没有找到avatar_url字段，完整JSON: \(json)")
+                }
+                
+                throw NetworkError.decodingError("无法解析头像上传响应")
+            }
+        } catch {
+            print("上传过程中发生错误: \(error.localizedDescription)")
+            throw error
         }
-        
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        let result = try decoder.decode(FoodJourneyModels.FileUploadResponse.self, from: responseData)
-        return result.url
     }
     
+    // 修改上传图片方法，增加更多错误处理
     func uploadImage(_ image: UIImage, endpoint: String) async throws -> String {
+        print("开始上传图片到 \(endpoint)")
+        
         guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+            print("无法将图片转换为JPEG数据")
             throw NetworkError.serverError("图片处理失败")
         }
-        return try await uploadFile(imageData, filename: "image.jpg", mimeType: "image/jpeg", endpoint: endpoint)
+        
+        print("图片已转换为JPEG数据，大小: \(imageData.count) 字节")
+        
+        do {
+            let url = try await uploadFile(imageData, filename: "image.jpg", mimeType: "image/jpeg", endpoint: endpoint)
+            print("图片上传成功，返回URL: \(url)")
+            return url
+        } catch {
+            print("图片上传失败: \(error.localizedDescription)")
+            throw error
+        }
     }
     
     func uploadAudio(_ audioData: Data, filename: String, endpoint: String) async throws -> FoodJourneyModels.AudioUploadResponse {

@@ -103,19 +103,30 @@ class AuthService: ObservableObject {
     }
     
     func uploadAvatar(image: UIImage) async throws {
-        let url = try await networkService.uploadImage(image, endpoint: "/auth/avatar")
-        print("头像上传成功，返回URL: \(url)")
-        
-        // 不要尝试直接修改 currentUser 的属性
-        // 而是直接通过 fetchUserProfile 获取更新后的用户信息
-        await fetchUserProfile()
-        
-        // 打印更新后的头像URL
-        if let avatarUrl = currentUser?.avatar_url {
-            print("更新后的头像URL: \(avatarUrl)")
-            print("完整的头像URL: \(getFullAvatarUrl(avatarUrl))")
-        } else {
-            print("更新后的用户信息中没有头像URL")
+        do {
+            print("开始处理头像图片...")
+            guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+                print("无法将图片转换为JPEG数据")
+                throw NetworkError.serverError("图片处理失败")
+            }
+            
+            print("头像图片处理完成，大小: \(imageData.count) 字节")
+            let url = try await networkService.uploadImage(image, endpoint: "/auth/avatar")
+            print("头像上传成功，返回URL: \(url)")
+            
+            // 获取更新后的用户信息
+            await fetchUserProfile()
+            
+            // 打印更新后的头像URL
+            if let avatarUrl = currentUser?.avatar_url {
+                print("更新后的头像URL: \(avatarUrl)")
+                print("完整的头像URL: \(getFullAvatarUrl(avatarUrl))")
+            } else {
+                print("更新后的用户信息中没有头像URL")
+            }
+        } catch {
+            print("上传头像失败: \(error.localizedDescription)")
+            throw error
         }
     }
     
