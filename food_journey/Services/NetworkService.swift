@@ -1,15 +1,26 @@
 import Foundation
 import UIKit
 
-class NetworkService {
+/// 网络服务类
+class NetworkService: NSObject, URLSessionDelegate {
     static let shared = NetworkService()
-    let baseURL = "https://infsols.com:8000/api/v1"  // 从 private 改为 public
     
-    private init() {
-        dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
-        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
-        dateFormatter.timeZone = TimeZone(secondsFromGMT: 0)
-    }
+    // 使用HTTPS协议，确保安全连接
+    let baseURL = "https://localhost:8000/api/v1"
+    
+    // 创建URLSession实例
+    private lazy var session: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 30.0
+        config.waitsForConnectivity = true  // 等待网络连接
+        
+        // 添加网络连接调试
+        if #available(iOS 17.0, *) {
+            config.networkServiceType = .responsiveData
+        }
+        
+        return URLSession(configuration: config, delegate: self, delegateQueue: nil)
+    }()
     
     private let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -18,6 +29,41 @@ class NetworkService {
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
         return formatter
     }()
+    
+    private override init() {
+        super.init()
+        print("NetworkService初始化完成，使用HTTPS连接")
+        print("服务器URL: \(baseURL)")
+    }
+    
+    // 实现URLSessionDelegate方法，允许接受自签名证书
+    func urlSession(
+        _ session: URLSession,
+        didReceive challenge: URLAuthenticationChallenge,
+        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+    ) {
+        print("收到SSL证书验证挑战: \(challenge.protectionSpace.host)")
+        
+        // 在开发环境中接受所有证书
+        #if DEBUG
+        if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust {
+            if let serverTrust = challenge.protectionSpace.serverTrust {
+                print("开发环境: 接受自签名证书: \(challenge.protectionSpace.host)")
+                // 配置评估选项
+                let policies = [SecPolicyCreateSSL(true, challenge.protectionSpace.host as CFString)]
+                SecTrustSetPolicies(serverTrust, policies as CFTypeRef)
+                
+                // 创建证书
+                let credential = URLCredential(trust: serverTrust)
+                completionHandler(.useCredential, credential)
+                return
+            }
+        }
+        #endif
+        
+        // 默认处理
+        completionHandler(.performDefaultHandling, nil)
+    }
     
     func request<T: Codable>(
         endpoint: String,
@@ -47,52 +93,76 @@ class NetworkService {
             }
         }
         
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        if let jsonString = String(data: data, encoding: .utf8) {
-            print("Response Data: \(jsonString)")
-        }
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw NetworkError.invalidResponse
-        }
-        
-        if !(200...299).contains(httpResponse.statusCode) {
-            if let errorResponse = try? JSONDecoder().decode(FoodJourneyModels.ErrorResponse.self, from: data) {
-                print("Error Response: \(errorResponse.detail)")
-                throw NetworkError.serverError(errorResponse.detail)
-            }
-            throw NetworkError.serverError("请求失败: \(httpResponse.statusCode)")
-        }
-        
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .custom { decoder in
-            let container = try decoder.singleValueContainer()
-            let dateString = try container.decode(String.self)
-            
-            if let date = self.dateFormatter.date(from: dateString) {
-                return date
-            }
-            
-            let fallbackFormatter = DateFormatter()
-            fallbackFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSZ"
-            fallbackFormatter.locale = Locale(identifier: "en_US_POSIX")
-            
-            if let date = fallbackFormatter.date(from: dateString) {
-                return date
-            }
-            
-            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Cannot decode date string \(dateString)")
-        }
+        print("发送请求: \(method) \(url.absoluteString)")
         
         do {
-            let decodedResponse = try decoder.decode(T.self, from: data)
-            return decodedResponse
-        } catch {
-            print("解码错误: \(error)")
+            let (data, response) = try await session.data(for: request)
+            
             if let jsonString = String(data: data, encoding: .utf8) {
-                print("原始JSON数据: \(jsonString)")
+                print("Response Data: \(jsonString)")
             }
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw NetworkError.invalidResponse
+            }
+            
+            if !(200...299).contains(httpResponse.statusCode) {
+                if let errorResponse = try? JSONDecoder().decode(FoodJourneyModels.ErrorResponse.self, from: data) {
+                    print("Error Response: \(errorResponse.detail)")
+                    
+                    // 处理验证错误，提取具体错误信息
+                    if httpResponse.statusCode == 422 && errorResponse.type == "validation_error" && errorResponse.errors != nil && !errorResponse.errors!.isEmpty {
+                        // 获取第一个验证错误的具体信息
+                        let firstError = errorResponse.errors!.first!
+                        throw NetworkError.validationError(firstError.message)
+                    }
+                    
+                    throw NetworkError.serverError(errorResponse.detail)
+                }
+                throw NetworkError.serverError("请求失败: \(httpResponse.statusCode)")
+            }
+            
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .custom { decoder in
+                let container = try decoder.singleValueContainer()
+                let dateString = try container.decode(String.self)
+                
+                if let date = self.dateFormatter.date(from: dateString) {
+                    return date
+                }
+                
+                let fallbackFormatter = DateFormatter()
+                fallbackFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSZ"
+                fallbackFormatter.locale = Locale(identifier: "en_US_POSIX")
+                
+                if let date = fallbackFormatter.date(from: dateString) {
+                    return date
+                }
+                
+                throw DecodingError.dataCorruptedError(in: container, debugDescription: "Cannot decode date string \(dateString)")
+            }
+            
+            do {
+                let decodedResponse = try decoder.decode(T.self, from: data)
+                
+                // 添加调试输出，查看是否含有avatar_url属性
+                if let jsonData = try? JSONSerialization.data(withJSONObject: try JSONSerialization.jsonObject(with: data, options: []), options: .prettyPrinted),
+                   let jsonString = String(data: jsonData, encoding: .utf8) {
+                    if jsonString.contains("avatar_url") {
+                        print("包含avatar_url的响应: \(jsonString)")
+                    }
+                }
+                
+                return decodedResponse
+            } catch {
+                print("解码错误: \(error)")
+                if let jsonString = String(data: data, encoding: .utf8) {
+                    print("原始JSON数据: \(jsonString)")
+                }
+                throw error
+            }
+        } catch {
+            print("网络请求失败: \(error.localizedDescription)")
             throw error
         }
     }
@@ -188,7 +258,7 @@ class NetworkService {
         
         request.httpBody = body
         
-        let (responseData, response) = try await URLSession.shared.data(for: request)
+        let (responseData, response) = try await session.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
@@ -234,7 +304,7 @@ class NetworkService {
         request.httpBody = body
         print(body)
         
-        let (responseData, response) = try await URLSession.shared.data(for: request)
+        let (responseData, response) = try await session.data(for: request)
         
         if let httpResponse = response as? HTTPURLResponse,
            !(200...299).contains(httpResponse.statusCode) {
@@ -289,7 +359,7 @@ class NetworkService {
                     request.httpBody = body
                     
                     // 发送请求并处理流式响应
-                    let (bytes, _) = try await URLSession.shared.bytes(for: request)
+                    let (bytes, _) = try await session.bytes(for: request)
                     
                     for try await line in bytes.lines {
                         print("接收到数据行: \(line)")
@@ -383,7 +453,7 @@ class NetworkService {
         Task {
             do {
                 // 发送请求并处理流式响应
-                let (bytes, _) = try await URLSession.shared.bytes(for: request)
+                let (bytes, _) = try await session.bytes(for: request)
                 
                 for try await line in bytes.lines {
                     print("接收到数据行: \(line)")
@@ -512,7 +582,7 @@ class NetworkService {
                         }
                     }
                     
-                    let (bytes, _) = try await URLSession.shared.bytes(for: request)
+                    let (bytes, _) = try await session.bytes(for: request)
                     
                     for try await line in bytes.lines {
                         print("接收到数据行: \(line)")
@@ -556,17 +626,55 @@ class NetworkService {
         }
     }
     
-    enum NetworkError: Error {
-        case invalidURL
-        case invalidResponse
-        case noData
-        case serverError(String)
-        case decodingError(String)
+    // 创建包含图片的表单数据，返回(数据, boundary)元组
+    func createImageFormData(_ image: UIImage, fieldName: String, filename: String = "image.jpg") async throws -> (Data, String) {
+        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+            throw NetworkError.serverError("图片处理失败")
+        }
+        
+        let boundary = UUID().uuidString
+        var body = Data()
+        
+        // 添加文件数据
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"\(fieldName)\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+        body.append(imageData)
+        body.append("\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        
+        // 打印上传URL
+        print("上传头像URL: \(baseURL + "/auth/avatar")")
+        
+        return (body, boundary)
     }
-    
-    //extension FoodJourneyModels {
-    //    struct ChatRequest: Codable {
-    //        let message: String
-    //    }
-    //}
+}
+
+// 将NetworkError和扩展移到类外部的文件级别
+enum NetworkError: Error {
+    case invalidURL
+    case invalidResponse
+    case noData
+    case serverError(String)
+    case decodingError(String)
+    case validationError(String)
+}
+
+extension NetworkError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .invalidURL:
+            return "无效的URL"
+        case .invalidResponse:
+            return "服务器返回了无效的响应"
+        case .noData:
+            return "服务器没有返回数据"
+        case .serverError(let message):
+            return message
+        case .decodingError(let message):
+            return "数据解析错误: \(message)"
+        case .validationError(let message):
+            return message
+        }
+    }
 }

@@ -2,6 +2,9 @@ import SwiftUI
 import Charts
 
 struct BodyDataDetailView: View {
+    // 接收从父视图传递的视图模型
+    @EnvironmentObject var viewModel: HealthTrackViewModel
+    
     // 状态变量用于控制编辑模式
     @State private var isEditing = false
     
@@ -140,6 +143,18 @@ struct BodyDataDetailView: View {
             }
         }
         .navigationTitle("身体数据详情")
+        .onAppear {
+            // 当视图出现时，从ViewModel加载数据
+            loadDataFromViewModel()
+        }
+    }
+    
+    // 从ViewModel加载数据
+    private func loadDataFromViewModel() {
+        weight = String(format: "%.1f", viewModel.currentWeight)
+        bodyFatPercentage = String(format: "%.1f", viewModel.currentBodyFat)
+        muscleMass = String(format: "%.1f", viewModel.currentMuscleWeight)
+        // BMR不在ViewModel中，保持不变
     }
     
     // 保存数据的方法
@@ -151,7 +166,7 @@ struct BodyDataDetailView: View {
         let bmrValue = Int(bmr) ?? 0
         
         // 准备请求数据
-        let requestData: [String: Any] = [
+        let fitnessUpdateData: [String: Any] = [
             "weight": weightValue,
             "body_fat_percentage": bodyFatValue,
             "muscle_mass": muscleMassValue,
@@ -160,14 +175,14 @@ struct BodyDataDetailView: View {
         
         do {
             // 将字典转为JSON数据
-            guard let jsonData = try? JSONSerialization.data(withJSONObject: requestData) else {
+            guard let jsonData = try? JSONSerialization.data(withJSONObject: fitnessUpdateData) else {
                 print("体型数据序列化失败")
                 return
             }
             
-            // 使用async/await方式调用NetworkService
+            // 使用async/await方式调用NetworkService，更新基本身体信息
             let response: FoodJourneyModels.UpdateResponse = try await NetworkService.shared.request(
-                endpoint: "/profile/fitness",
+                endpoint: "/profile/basic",
                 method: "PUT",
                 body: jsonData,
                 requiresAuth: true
@@ -175,11 +190,20 @@ struct BodyDataDetailView: View {
             
             // 成功处理
             print("体型数据更新成功: \(response.message)")
-            // 可以在这里添加UI反馈，例如显示成功提示
+            
+            // 更新ViewModel中的数据 - 直接更新本地数据，避免额外的网络请求
             await MainActor.run {
+                viewModel.currentWeight = weightValue
+                viewModel.currentBodyFat = bodyFatValue
+                viewModel.currentMuscleWeight = muscleMassValue
+                
                 // 显示保存成功的反馈提示
                 isEditing = false
             }
+            
+            // 不再调用刷新，因为我们已经手动更新了视图模型数据
+            // await viewModel.refreshData()
+            
         } catch {
             // 错误处理
             print("体型数据更新失败: \(error.localizedDescription)")
@@ -202,5 +226,6 @@ struct WeightEntry: Identifiable {
 struct BodyDataDetailView_Previews: PreviewProvider {
     static var previews: some View {
         BodyDataDetailView()
+            .environmentObject(HealthTrackViewModel())
     }
 }

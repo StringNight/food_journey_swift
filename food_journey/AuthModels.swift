@@ -1,17 +1,6 @@
 import Foundation
 
 extension FoodJourneyModels {
-    struct LoginRequest: Codable {
-        let username: String
-        let password: String
-    }
-
-    struct RegisterRequest: Codable {
-        let username: String
-        let password: String
-        let confirm_password: String
-    }
-
     struct AuthResponse: Codable {
         let token_info: TokenInfo
         let user: UserProfile
@@ -50,5 +39,25 @@ extension FoodJourneyModels {
 
     struct ErrorResponse: Codable {
         let detail: String
+        let type: String?
+        let errors: [ValidationError]?
+        
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            detail = try container.decode(String.self, forKey: .detail)
+            type = try container.decodeIfPresent(String.self, forKey: .type)
+            errors = try container.decodeIfPresent([ValidationError].self, forKey: .errors)
+        }
+        
+        enum CodingKeys: String, CodingKey {
+            case detail, type, errors
+        }
+    }
+    
+    struct ValidationError: Codable {
+        let field: String
+        let field_path: String
+        let message: String
+        let type: String
     }
 } 

@@ -98,7 +98,7 @@ struct UserProfileSection: View {
                 Spacer()
                 VStack {
                     if let user = authService.currentUser {
-                        AsyncImage(url: URL(string: user.avatar_url ?? "")) { phase in
+                        AsyncImage(url: URL(string: getFullAvatarUrl(user.avatar_url))) { phase in
                             switch phase {
                             case .empty:
                                 ProgressView()
@@ -154,6 +154,27 @@ struct UserProfileSection: View {
             }
         }
 //    }
+}
+
+func getFullAvatarUrl(_ avatarUrl: String?) -> String {
+    guard let url = avatarUrl, !url.isEmpty else {
+        return ""
+    }
+    
+    // 如果已经是完整URL（以http开头），直接返回
+    if url.hasPrefix("http") {
+        return url
+    }
+    
+    // 获取服务器基础URL
+    let baseURL = NetworkService.shared.baseURL
+    // 移除URL中的api/v1前缀
+    let serverBaseURL = baseURL.replacingOccurrences(of: "/api/v1", with: "")
+    
+    // 如果avatarUrl以/开头，删除第一个/以避免双斜杠问题
+    let cleanUrl = url.hasPrefix("/") ? String(url.dropFirst()) : url
+    
+    return "\(serverBaseURL)/\(cleanUrl)"
 }
 
 public func formatDate(_ date: Date) -> String {

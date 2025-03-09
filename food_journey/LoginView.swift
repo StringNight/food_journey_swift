@@ -5,13 +5,10 @@ struct LoginView: View {
     @State private var username = ""
     @State private var password = ""
     @State private var confirmPassword = ""
-    @State private var email = ""
     @State private var isRegistering = false
     @State private var showError = false
     @State private var errorMessage = ""
     @State private var rememberMe = false
-    @State private var showResetPassword = false
-    @State private var resetEmail = ""
     @State private var showBiometricButton = false
     @State private var isLoading = false
     
@@ -26,7 +23,7 @@ struct LoginView: View {
                             .foregroundColor(.blue)
                             .padding(.bottom, 20)
                         
-                        if !isRegistering && !showResetPassword {
+                        if !isRegistering {
                             if showBiometricButton {
                                 Button(action: biometricLogin) {
                                     Label(
@@ -43,10 +40,10 @@ struct LoginView: View {
                             }
                         }
                         
-                        if showResetPassword {
-                            resetPasswordView
+                        if isRegistering {
+                            registerView
                         } else {
-                            loginRegisterView
+                            loginView
                         }
                     }
                     .padding()
@@ -65,37 +62,23 @@ struct LoginView: View {
             } message: {
                 Text(errorMessage)
             }
-            .navigationTitle(isRegistering ? "注册" : (showResetPassword ? "重置密码" : "登录"))
+            .navigationTitle(isRegistering ? "注册" : "登录")
             .onAppear {
                 checkBiometricAvailability()
             }
         }
     }
     
-    private var loginRegisterView: some View {
+    private var loginView: some View {
         VStack {
             TextField("用户名", text: $username)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
                 .autocapitalization(.none)
                 .textContentType(.username)
             
-            if isRegistering {
-                TextField("邮箱", text: $email)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .autocapitalization(.none)
-                    .textContentType(.emailAddress)
-                    .keyboardType(.emailAddress)
-            }
-            
             SecureField("密码", text: $password)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
                 .textContentType(isRegistering ? .newPassword : .password)
-            
-            if isRegistering {
-                SecureField("确认密码", text: $confirmPassword)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .textContentType(.newPassword)
-            }
             
             if !isRegistering {
                 Toggle("记住我", isOn: $rememberMe)
@@ -107,62 +90,62 @@ struct LoginView: View {
                     await handleLoginRegister()
                 }
             }) {
-                Text(isRegistering ? "注册" : "登录")
+                Text("登录")
                     .frame(maxWidth: .infinity)
                     .padding()
                     .background(Color.blue)
                     .foregroundColor(.white)
                     .cornerRadius(10)
             }
-            .disabled(isLoading || username.isEmpty || password.isEmpty || 
-                     (isRegistering && (email.isEmpty || confirmPassword.isEmpty)))
-            
-            if !isRegistering {
-                Button("忘记密码？") {
-                    showResetPassword = true
-                }
-                .foregroundColor(.blue)
-                .padding(.top, 10)
-            }
+            .disabled(isLoading || username.isEmpty || password.isEmpty)
             
             Button(action: {
                 isRegistering.toggle()
                 clearFields()
             }) {
-                Text(isRegistering ? "已有账号？登录" : "没有账号？注册")
+                Text("没有账号？注册")
                     .foregroundColor(.blue)
             }
             .padding(.top, 10)
         }
     }
     
-    private var resetPasswordView: some View {
+    private var registerView: some View {
         VStack {
-            TextField("邮箱", text: $resetEmail)
+            TextField("用户名", text: $username)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
                 .autocapitalization(.none)
-                .textContentType(.emailAddress)
-                .keyboardType(.emailAddress)
+                .textContentType(.username)
+            
+            SecureField("密码", text: $password)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
+                .textContentType(isRegistering ? .newPassword : .password)
+            
+            SecureField("确认密码", text: $confirmPassword)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
+                .textContentType(.newPassword)
             
             Button(action: {
                 Task {
-                    await resetPassword()
+                    await handleLoginRegister()
                 }
             }) {
-                Text("发送重置链接")
+                Text("注册")
                     .frame(maxWidth: .infinity)
                     .padding()
                     .background(Color.blue)
                     .foregroundColor(.white)
                     .cornerRadius(10)
             }
-            .disabled(isLoading || resetEmail.isEmpty)
+            .disabled(isLoading || username.isEmpty || password.isEmpty || confirmPassword.isEmpty)
             
-            Button("返回登录") {
-                showResetPassword = false
-                resetEmail = ""
+            Button(action: {
+                isRegistering.toggle()
+                clearFields()
+            }) {
+                Text("已有账号？登录")
+                    .foregroundColor(.blue)
             }
-            .foregroundColor(.blue)
             .padding(.top, 10)
         }
     }
@@ -182,7 +165,7 @@ struct LoginView: View {
         defer { isLoading = false }
         
         do {
-            try await authService.loginWithBiometric()
+            try await authService.loginWithBiometrics()
         } catch {
             showError = true
             errorMessage = error.localizedDescription
@@ -191,15 +174,6 @@ struct LoginView: View {
     
     private func handleLoginRegister() async {
         if isRegistering {
-            // 验证邮箱格式
-            let emailRegex = "[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,64}"
-            let emailPredicate = NSPredicate(format:"SELF MATCHES %@", emailRegex)
-            guard emailPredicate.evaluate(with: email) else {
-                showError = true
-                errorMessage = "邮箱格式不正确"
-                return
-            }
-            
             // 验证密码匹配
             guard password == confirmPassword else {
                 showError = true
@@ -213,28 +187,17 @@ struct LoginView: View {
         
         do {
             if isRegistering {
-                try await authService.register(username: username, password: password, email: email)
+                try await authService.register(username: username, password: password)
+                print("注册成功: \(username)")
             } else {
                 try await authService.login(username: username, password: password, rememberMe: rememberMe)
+                print("登录成功: \(username)")
             }
             clearFields()
         } catch {
             showError = true
             errorMessage = error.localizedDescription
-        }
-    }
-    
-    private func resetPassword() async {
-        isLoading = true
-        defer { isLoading = false }
-        
-        do {
-            try await authService.resetPassword(email: resetEmail)
-            showResetPassword = false
-            resetEmail = ""
-        } catch {
-            showError = true
-            errorMessage = error.localizedDescription
+            print("错误: \(error.localizedDescription)")
         }
     }
     
@@ -242,7 +205,6 @@ struct LoginView: View {
         username = ""
         password = ""
         confirmPassword = ""
-        email = ""
     }
 }
 

@@ -155,11 +155,15 @@ public enum FoodJourneyModels {
         }
     }
 
-    public struct PasswordResetRequest: Codable {
-        public let email: String
+    public struct RegisterRequest: Codable {
+        public let username: String
+        public let password: String
+        public let confirm_password: String
         
-        public init(email: String) {
-            self.email = email
+        public init(username: String, password: String, confirm_password: String) {
+            self.username = username
+            self.password = password
+            self.confirm_password = confirm_password
         }
     }
 
@@ -186,6 +190,17 @@ public enum FoodJourneyModels {
     struct RecipeResponse: Codable {
         let schema_version: String
         let recipe: Recipe?
+    }
+
+    // MARK: - 身份验证请求
+    public struct LoginRequest: Codable {
+        public let username: String
+        public let password: String
+        
+        public init(username: String, password: String) {
+            self.username = username
+            self.password = password
+        }
     }
 
 }

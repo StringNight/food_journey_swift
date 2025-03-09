@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct TrainingProgressDetailView: View {
+    // 接收从父视图传递的视图模型
+    @EnvironmentObject var viewModel: HealthTrackViewModel
+    
     // 状态变量用于控制编辑模式
     @State private var isEditing = false
     
@@ -197,6 +200,18 @@ struct TrainingProgressDetailView: View {
             }
         }
         .navigationTitle("训练详情")
+        .onAppear {
+            // 当视图出现时，从ViewModel加载数据
+            loadDataFromViewModel()
+        }
+    }
+    
+    // 从ViewModel加载数据
+    private func loadDataFromViewModel() {
+        trainingType = viewModel.trainingType
+        completedSets = String(viewModel.completedSets)
+        totalSets = String(viewModel.totalSets)
+        muscleGroup = viewModel.muscleGroup
     }
     
     // 保存数据的方法
@@ -207,20 +222,26 @@ struct TrainingProgressDetailView: View {
         let trainingWeightDouble = Double(trainingWeight) ?? 0
         let trainingProgressValue = Double(completedSets) ?? 0
         
-        // 记录训练数据
-        let requestData: [String: Any] = [
-            "exercise_type": trainingType,
-            "sets": trainingSetInt,
+        // 记录训练数据 - 使用与后端对应的ExerciseRecord结构
+        let exerciseSetData: [String: Any] = [
             "reps": trainingRepsInt,
-            "weight": trainingWeightDouble,
-            "duration": 0, // 可以根据需要添加时长
-            "calories_burned": 0, // 可以根据需要添加消耗的卡路里
-            "notes": "用户记录的训练"
+            "weight": trainingWeightDouble
+        ]
+        
+        let exerciseData: [String: Any] = [
+            "id": UUID().uuidString, // 生成一个临时ID，后端会替换
+            "user_id": "current_user", // 后端会根据认证信息替换
+            "exercise_name": trainingType,
+            "exercise_type": "力量", // 假设是力量训练
+            "sets": [exerciseSetData],
+            "calories_burned": 0.0,
+            "notes": "用户记录的训练",
+            "recorded_at": ISO8601DateFormatter().string(from: Date())
         ]
         
         do {
             // 将字典转为JSON数据
-            guard let jsonData = try? JSONSerialization.data(withJSONObject: requestData) else {
+            guard let jsonData = try? JSONSerialization.data(withJSONObject: exerciseData) else {
                 print("数据序列化失败")
                 return
             }
@@ -236,7 +257,7 @@ struct TrainingProgressDetailView: View {
             // 成功处理
             print("训练数据更新成功: \(response.id)")
             
-            // 更新训练偏好
+            // 更新训练偏好 - 但不触发额外刷新
             await updateTrainingPreferences(
                 trainingType: trainingType,
                 trainingProgress: trainingProgressValue,
@@ -244,11 +265,17 @@ struct TrainingProgressDetailView: View {
                 trainingDetail: trainingDetail
             )
             
-            // 可以在这里添加UI反馈，例如显示成功提示
+            // 更新ViewModel中的数据 - 直接更新，避免额外的网络请求
             await MainActor.run {
+                viewModel.trainingType = trainingType
+                viewModel.completedSets = Int(completedSets) ?? 0
+                viewModel.totalSets = Int(totalSets) ?? 0
+                viewModel.muscleGroup = muscleGroup
+                
                 // 显示保存成功的反馈提示
                 isEditing = false
             }
+            
         } catch {
             // 错误处理
             print("训练数据更新失败: \(error.localizedDescription)")
@@ -264,7 +291,7 @@ struct TrainingProgressDetailView: View {
     // 更新训练偏好
     private func updateTrainingPreferences(trainingType: String, trainingProgress: Double, muscleGroup: String, trainingDetail: String) async {
         // 准备请求数据
-        let requestData: [String: Any] = [
+        let fitnessPreferencesData: [String: Any] = [
             "training_type": trainingType,
             "training_progress": trainingProgress,
             "muscle_group_analysis": [
@@ -274,7 +301,7 @@ struct TrainingProgressDetailView: View {
         
         do {
             // 将字典转为JSON数据
-            guard let jsonData = try? JSONSerialization.data(withJSONObject: requestData) else {
+            guard let jsonData = try? JSONSerialization.data(withJSONObject: fitnessPreferencesData) else {
                 print("训练偏好数据序列化失败")
                 return
             }
@@ -288,6 +315,15 @@ struct TrainingProgressDetailView: View {
             )
             
             print("训练偏好更新成功: \(response.message)")
+            
+            // 更新ViewModel中的数据 - 直接更新本地数据，避免额外的网络请求
+            await MainActor.run {
+                viewModel.trainingType = trainingType
+                viewModel.muscleGroup = muscleGroup
+            }
+            
+            // 不再调用刷新，因为我们已经手动更新了视图模型数据
+            // await viewModel.refreshData()
         } catch {
             print("训练偏好更新失败: \(error.localizedDescription)")
         }
@@ -297,5 +333,6 @@ struct TrainingProgressDetailView: View {
 struct TrainingProgressDetailView_Previews: PreviewProvider {
     static var previews: some View {
         TrainingProgressDetailView()
+            .environmentObject(HealthTrackViewModel())
     }
 }

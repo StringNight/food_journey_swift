@@ -22,7 +22,7 @@ class AuthService: ObservableObject {
         }
     }
     
-    func login(username: String, password: String, rememberMe: Bool) async throws {
+    func login(username: String, password: String, rememberMe: Bool = false) async throws {
         let loginRequest = FoodJourneyModels.LoginRequest(username: username, password: password)
         let response: FoodJourneyModels.AuthResponse = try await networkService.request(
             endpoint: "/auth/login/json",
@@ -40,7 +40,7 @@ class AuthService: ObservableObject {
         }
     }
     
-    func loginWithBiometric() async throws {
+    func loginWithBiometrics() async throws {
         guard !rememberedUsername.isEmpty else {
             throw AuthError.noBiometricCredentials
         }
@@ -57,33 +57,36 @@ class AuthService: ObservableObject {
         try await login(username: rememberedUsername, password: password, rememberMe: true)
     }
     
-    func register(username: String, password: String, email: String) async throws {
+    func register(username: String, password: String) async throws {
+        print("开始注册用户: \(username)")
+        
         let registerRequest = FoodJourneyModels.RegisterRequest(
             username: username,
             password: password,
             confirm_password: password
         )
         
-        let response: FoodJourneyModels.AuthResponse = try await networkService.request(
-            endpoint: "/auth/register",
-            method: "POST",
-            body: try JSONEncoder().encode(registerRequest)
-        )
-        print(response)
-        
-        authToken = response.token_info.access_token
-        print(authToken)
-        currentUser = response.user
-        isAuthenticated = true
-    }
-    
-    func resetPassword(email: String) async throws {
-        let request = FoodJourneyModels.PasswordResetRequest(email: email)
-        let _: FoodJourneyModels.EmptyResponse = try await networkService.request(
-            endpoint: "/auth/reset-password",
-            method: "POST",
-            body: try JSONEncoder().encode(request)
-        )
+        do {
+            let jsonData = try JSONEncoder().encode(registerRequest)
+            if let jsonString = String(data: jsonData, encoding: .utf8) {
+                print("注册请求JSON: \(jsonString)")
+            }
+            
+            let response: FoodJourneyModels.AuthResponse = try await networkService.request(
+                endpoint: "/auth/register",
+                method: "POST",
+                body: jsonData
+            )
+            
+            print("注册响应成功")
+            authToken = response.token_info.access_token
+            currentUser = response.user
+            isAuthenticated = true
+            
+        } catch {
+            print("注册失败: \(error.localizedDescription)")
+            throw error
+        }
     }
     
     func changePassword(currentPassword: String, newPassword: String) async throws {
@@ -100,9 +103,20 @@ class AuthService: ObservableObject {
     }
     
     func uploadAvatar(image: UIImage) async throws {
-        let url = try await networkService.uploadImage(image, endpoint: "/auth/avatar")
-        // 更新用户信息
-        await fetchUserProfile()
+        // 创建表单数据
+        let (formData, boundary) = try await networkService.createImageFormData(image, fieldName: "file")
+        
+        // 修改为接收UserResponse而不是简单的URL
+        let response: FoodJourneyModels.UserProfile = try await networkService.request(
+            endpoint: "/auth/avatar",
+            method: "POST",
+            body: formData,
+            requiresAuth: true,
+            contentType: "multipart/form-data; boundary=\(boundary)"
+        )
+        
+        // 更新当前用户信息
+        currentUser = response
     }
     
     func logout() {
