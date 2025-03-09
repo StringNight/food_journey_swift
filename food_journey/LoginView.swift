@@ -24,20 +24,20 @@ struct LoginView: View {
                             .padding(.bottom, 20)
                         
                         if !isRegistering {
-                            if showBiometricButton {
-                                Button(action: biometricLogin) {
-                                    Label(
-                                        BiometricAuthUtil.shared.biometricType == .faceID ? "Face ID 登录" : "Touch ID 登录",
-                                        systemImage: BiometricAuthUtil.shared.biometricType == .faceID ? "faceid" : "touchid"
-                                    )
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(Color.green)
-                                    .foregroundColor(.white)
-                                    .cornerRadius(10)
-                                }
-                                .disabled(isLoading)
-                            }
+                            // if showBiometricButton {
+                            //     Button(action: biometricLogin) {
+                            //         Label(
+                            //             BiometricAuthUtil.shared.biometricType == .faceID ? "Face ID 登录" : "Touch ID 登录",
+                            //             systemImage: BiometricAuthUtil.shared.biometricType == .faceID ? "faceid" : "touchid"
+                            //         )
+                            //         .frame(maxWidth: .infinity)
+                            //         .padding()
+                            //         .background(Color.green)
+                            //         .foregroundColor(.white)
+                            //         .cornerRadius(10)
+                            //     }
+                            //     .disabled(isLoading)
+                            // }
                         }
                         
                         if isRegistering {

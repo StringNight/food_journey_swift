@@ -45,25 +45,25 @@ struct AccountView: View {
                                     .background(Color(.secondarySystemGroupedBackground))
                                 }
 
-                                if BiometricAuthUtil.shared.biometricType != .none {
-                                    HStack(alignment: .center) {
-                                        Image(systemName: BiometricAuthUtil.shared.biometricType == .faceID ? "faceid" : "touchid")
-                                            .frame(width: 20)
-                                            .foregroundColor(.blue)
-                                        Text(BiometricAuthUtil.shared.biometricType == .faceID ? "使用 Face ID" : "使用 Touch ID")
-                                            .padding(.leading, 5)
-                                        Spacer()
-                                        // 移除这里错误放置的方法定义
-                                        Toggle("", isOn: $useBiometric)
-                                    }
-                                    .padding()
-                                    .background(Color(.secondarySystemGroupedBackground))
-                                    // 将 onChange 移到外面，减少嵌套层级
-                                    .onChange(of: useBiometric) { newValue in
-                                        handleBiometricToggle(newValue)
-                                    }
-                                    Divider()
-                                }
+                                // if BiometricAuthUtil.shared.biometricType != .none {
+                                //     HStack(alignment: .center) {
+                                //         Image(systemName: BiometricAuthUtil.shared.biometricType == .faceID ? "faceid" : "touchid")
+                                //             .frame(width: 20)
+                                //             .foregroundColor(.blue)
+                                //         Text(BiometricAuthUtil.shared.biometricType == .faceID ? "使用 Face ID" : "使用 Touch ID")
+                                //             .padding(.leading, 5)
+                                //         Spacer()
+                                //         // 移除这里错误放置的方法定义
+                                //         Toggle("", isOn: $useBiometric)
+                                //     }
+                                //     .padding()
+                                //     .background(Color(.secondarySystemGroupedBackground))
+                                //     // 将 onChange 移到外面，减少嵌套层级
+                                //     .onChange(of: useBiometric) { newValue in
+                                //         handleBiometricToggle(newValue)
+                                //     }
+                                //     Divider()
+                                // }
                             }
                             .background(Color(.secondarySystemGroupedBackground))
                             .cornerRadius(10)
