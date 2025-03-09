@@ -29,9 +29,22 @@
 		4556AC982CFB5B1E009F91ED /* food_journeyUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = food_journeyUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		4566C2C92D7C985600B5BB31 /* Exceptions for "food_journey" folder in "food_journey" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"food-journey-Info.plist",
+			);
+			target = 4556AC7C2CFB5B1D009F91ED /* food_journey */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		4556AC7F2CFB5B1D009F91ED /* food_journey */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				4566C2C92D7C985600B5BB31 /* Exceptions for "food_journey" folder in "food_journey" target */,
+			);
 			path = food_journey;
 			sourceTree = "<group>";
 		};
@@ -398,6 +411,8 @@
 				DEVELOPMENT_TEAM = UR6V28LG5R;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "food-journey-Info.plist";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "我们需要访问语音识别功能来将您的语音转换为文本";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -437,6 +452,8 @@
 				DEVELOPMENT_TEAM = UR6V28LG5R;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "food-journey-Info.plist";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "我们需要访问语音识别功能来将您的语音转换为文本";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;

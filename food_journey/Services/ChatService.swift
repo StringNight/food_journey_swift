@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import AVFoundation
+import Speech
 
 @MainActor
 class ChatService: ObservableObject {
@@ -171,7 +172,6 @@ class ChatService: ObservableObject {
             isRecording = false
             
             let audioUrl = recorder.url
-            let audioData = try Data(contentsOf: audioUrl)
             
             // 创建一个唯一标识符用于关联本地文件
             let localFileId = UUID().uuidString
@@ -200,14 +200,29 @@ class ChatService: ObservableObject {
                 messages.append(contentsOf: [userMessage, botMessage])
             }
             
-            // 直接发送语音文件并获取流式响应
+            // 使用 Speech 框架进行语音识别
+            let recognizedText = try await recognizeSpeech(from: audioUrl)
+            
+            // 更新用户消息的内容为识别出的文本
+            await MainActor.run {
+                userMessage.content = recognizedText
+                if let index = messages.firstIndex(where: { $0.id == userMessage.id }) {
+                    messages[index] = userMessage
+                }
+            }
+            
+            // 使用识别出的文本作为普通文本消息发送
             var accumulatedContent = ""
             
-            // 使用 multipart/form-data 上传语音文件
-            for try await streamData in try await networkService.uploadAudioAndStream(
-                audioData,
-                filename: audioUrl.lastPathComponent,
-                endpoint: "/chat/voice"
+            // 创建文本请求
+            let request = FoodJourneyModels.ChatTextRequest(message: recognizedText)
+            
+            // 使用 streamRequest 处理流式响应，与发送文本消息相同
+            for try await streamData in try await networkService.streamRequest(
+                endpoint: "/chat/stream",
+                method: "POST",
+                body: try JSONEncoder().encode(request),
+                requiresAuth: true
             ) {
                 switch streamData {
                 case .message(let message):
@@ -218,26 +233,49 @@ class ChatService: ObservableObject {
                             messages[index] = botMessage
                         }
                     }
-                case .history(let history):
-                    // 查找最后一条用户语音消息
-                    for historyMessage in history {
-                        if historyMessage.is_user && historyMessage.voice_url != nil {
-                            await MainActor.run {
-                                // 更新用户消息的内容，但保留本地文件ID作为voiceUrl
-                                userMessage.content = historyMessage.transcribed_text ?? ""
-                                // 不覆盖voiceUrl，保持使用本地文件ID
-                                
-                                if let index = messages.firstIndex(where: { $0.id == userMessage.id }) {
-                                    messages[index] = userMessage
-                                }
-                            }
-                            break
-                        }
-                    }
+                case .history:
+                    break
                 }
             }
             
             return botMessage
+        }
+
+        private func recognizeSpeech(from audioURL: URL) async throws -> String {
+
+        // 检查语音识别权限
+        var authStatus = SFSpeechRecognizer.authorizationStatus()
+        if authStatus != .authorized {
+            await withCheckedContinuation { continuation in
+                SFSpeechRecognizer.requestAuthorization { status in
+                    authStatus = status
+                    continuation.resume()
+                }
+            }
+        }
+        
+        // 如果权限未授权，抛出错误
+        if authStatus != .authorized {
+            throw NSError(domain: "ChatService", code: 1004, userInfo: [NSLocalizedDescriptionKey: "语音识别未授权"])
+        }
+        
+        // 创建语音识别请求
+        let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-CN"))
+        let request = SFSpeechURLRecognitionRequest(url: audioURL)
+        
+        // 执行识别
+        return try await withCheckedThrowingContinuation { continuation in
+            recognizer?.recognitionTask(with: request) { result, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                
+                if let result = result, result.isFinal {
+                    continuation.resume(returning: result.bestTranscription.formattedString)
+                }
+            }
+        }
         }
         
         // 播放语音消息
