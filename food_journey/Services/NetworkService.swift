@@ -6,7 +6,7 @@ class NetworkService: NSObject, URLSessionDelegate {
     static let shared = NetworkService()
     
     // 使用HTTPS协议，确保安全连接
-    let baseURL = "https://localhost:8000/api/v1"
+    let baseURL = "https://infsols.com:8000/api/v1"
     
     // 创建URLSession实例
     private lazy var session: URLSession = {

@@ -91,69 +91,115 @@ struct UserProfileSection: View {
     @Binding var showImagePicker: Bool
     @Binding var isUploading: Bool
     @Binding var selectedImage: UIImage?
-
+    
     var body: some View {
-//        Section(header: Text("个人信息")) {
-            HStack {
-                Spacer()
-                VStack {
-                    if let user = authService.currentUser {
-                        AsyncImage(url: URL(string: getFullAvatarUrl(user.avatar_url))) { phase in
-                            switch phase {
-                            case .empty:
-                                ProgressView()
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                            case .failure:
-                                Image(systemName: "person.circle.fill")
-                                    .resizable()
-                                    .foregroundColor(.gray)
-                            @unknown default:
-                                EmptyView()
-                            }
-                        }
+        VStack {
+            // 头像部分
+            ZStack {
+                // 显示头像或默认图片
+                if let selectedImage = selectedImage {
+                    // 显示选择的图片（尚未上传）
+                    Image(uiImage: selectedImage)
+                        .resizable()
+                        .scaledToFill()
                         .frame(width: 100, height: 100)
                         .clipShape(Circle())
                         .overlay(Circle().stroke(Color.gray, lineWidth: 2))
-
+                } else if let user = authService.currentUser, let avatarUrl = user.avatar_url, !avatarUrl.isEmpty {
+                    // 显示已上传的头像
+                    let fullUrl = getFullAvatarUrl(avatarUrl)
+                    AsyncImage(url: URL(string: fullUrl)) { phase in
+                        switch phase {
+                        case .empty:
+                            ProgressView()
+                                .onAppear {
+                                    print("正在加载头像: \(fullUrl)")
+                                }
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .onAppear {
+                                    print("头像加载成功")
+                                }
+                        case .failure(let error):
+                            // 加载失败时显示默认头像
+                            Image(systemName: "person.circle.fill")
+                                .resizable()
+                                .foregroundColor(.gray)
+                                .onAppear {
+                                    print("头像加载失败: \(error.localizedDescription), URL: \(fullUrl)")
+                                }
+                        @unknown default:
+                            EmptyView()
+                        }
+                    }
+                    .frame(width: 100, height: 100)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.gray, lineWidth: 2))
+                } else {
+                    // 没有头像时显示默认头像
+                    Image(systemName: "person.circle.fill")
+                        .resizable()
+                        .frame(width: 100, height: 100)
+                        .foregroundColor(.gray)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(Color.gray, lineWidth: 2))
+                        .onAppear {
+                            if let user = authService.currentUser {
+                                print("用户没有头像URL: \(String(describing: user.avatar_url))")
+                            } else {
+                                print("当前用户为空")
+                            }
+                        }
+                }
+                
+                // 上传按钮
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
                         Button(action: {
                             showImagePicker = true
                         }) {
-                            Text(isUploading ? "上传中..." : "更换头像")
+                            Image(systemName: "camera.fill")
+                                .foregroundColor(.white)
+                                .padding(8)
+                                .background(Color.blue)
+                                .clipShape(Circle())
                         }
                         .disabled(isUploading)
                     }
                 }
-                Spacer()
+                .frame(width: 100, height: 100)
+                
+                // 上传中指示器
+                if isUploading {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .background(Color.black.opacity(0.5))
+                        .frame(width: 100, height: 100)
+                        .clipShape(Circle())
+                }
             }
-            .padding(.vertical)
-
+            .frame(maxWidth: .infinity) // 添加这一行使头像居中
+            
+            // 用户信息
             if let user = authService.currentUser {
-                HStack {
-                    Text("用户名")
-                    Spacer()
-                    Text(user.username)
-                        .foregroundColor(.gray)
-                }
-
-//                HStack {
-//                    Text("邮箱")
-//                    Spacer()
-//                    Text(user.email)
-//                        .foregroundColor(.gray)
-//                }
-
-                HStack {
-                    Text("注册时间")
-                    Spacer()
-                    Text(formatDate(user.created_at))
-                        .foregroundColor(.gray)
-                }
+                Text(user.username)
+                    .font(.headline)
+                    .padding(.top, 8)
             }
         }
-//    }
+        .padding()
+    }
+}
+
+// 添加一个扩展来检查字符串是否为空或nil
+extension Optional where Wrapped == String {
+    var isNilOrEmpty: Bool {
+        return self == nil || self!.isEmpty
+    }
 }
 
 func getFullAvatarUrl(_ avatarUrl: String?) -> String {

@@ -103,20 +103,20 @@ class AuthService: ObservableObject {
     }
     
     func uploadAvatar(image: UIImage) async throws {
-        // 创建表单数据
-        let (formData, boundary) = try await networkService.createImageFormData(image, fieldName: "file")
+        let url = try await networkService.uploadImage(image, endpoint: "/auth/avatar")
+        print("头像上传成功，返回URL: \(url)")
         
-        // 修改为接收UserResponse而不是简单的URL
-        let response: FoodJourneyModels.UserProfile = try await networkService.request(
-            endpoint: "/auth/avatar",
-            method: "POST",
-            body: formData,
-            requiresAuth: true,
-            contentType: "multipart/form-data; boundary=\(boundary)"
-        )
+        // 不要尝试直接修改 currentUser 的属性
+        // 而是直接通过 fetchUserProfile 获取更新后的用户信息
+        await fetchUserProfile()
         
-        // 更新当前用户信息
-        currentUser = response
+        // 打印更新后的头像URL
+        if let avatarUrl = currentUser?.avatar_url {
+            print("更新后的头像URL: \(avatarUrl)")
+            print("完整的头像URL: \(getFullAvatarUrl(avatarUrl))")
+        } else {
+            print("更新后的用户信息中没有头像URL")
+        }
     }
     
     func logout() {
