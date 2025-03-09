@@ -204,6 +204,7 @@ class HealthTrackViewModel: ObservableObject {
 struct HealthTrackView: View {
     // 使用视图模型管理数据
     @StateObject private var viewModel = HealthTrackViewModel()
+    @StateObject private var authService = AuthService.shared
     
     // 控制目标编辑模式
     @State private var isEditingGoals = false
@@ -233,250 +234,330 @@ struct HealthTrackView: View {
     }
     
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(alignment: .leading) {
-                    
-                    // 顶部区域：用户头像、昵称
-                    HStack(alignment: .center) {
-                        NavigationLink(destination: ProfileView()) {
-                            Image(systemName: "person.crop.circle")
-                                .resizable()
-                                .frame(width: 60, height: 60)
-                                .padding()
-                        }
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Tianxin")
-                                .font(.title2)
-                                .bold()
-                        }
-                        Spacer()
+            VStack() {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 5) {
                         
-                        // 添加编辑目标按钮
-                        Button(action: {
-                            isEditingGoals.toggle()
-                        }) {
-                            Text(isEditingGoals ? "完成" : "编辑目标")
-                                .foregroundColor(.blue)
+                        // 顶部区域：用户头像、昵称
+                        HStack(alignment: .center) {
+                            NavigationLink(destination: ProfileView()) {
+                                // 显示头像或默认图片
+                                if let user = authService.currentUser, let avatarUrl = user.avatar_url, !avatarUrl.isEmpty {
+                                    // 显示已上传的头像
+                                    let fullUrl = getFullAvatarUrl(avatarUrl)
+                                    AsyncImage(url: URL(string: fullUrl)) { phase in
+                                        switch phase {
+                                        case .empty:
+                                            ProgressView()
+                                                .onAppear {
+                                                    print("正在加载头像: \(fullUrl)")
+                                                }
+                                        case .success(let image):
+                                            image
+                                                .resizable()
+                                                .scaledToFill()
+                                                .onAppear {
+                                                    print("头像加载成功")
+                                                }
+                                        case .failure(let error):
+                                            // 加载失败时显示默认头像
+                                            Image(systemName: "person.crop.circle")
+                                                .resizable()
+                                                .foregroundColor(.gray)
+                                                .onAppear {
+                                                    print("头像加载失败: \(error.localizedDescription), URL: \(fullUrl)")
+                                                }
+                                        @unknown default:
+                                            EmptyView()
+                                        }
+                                    }
+                                    .frame(width: 60, height: 60)
+                                    .clipShape(Circle())
+                                } else {
+                                    // 没有头像时显示默认头像
+                                    Image(systemName: "person.crop.circle")
+                                        .resizable()
+                                        .frame(width: 60, height: 60)
+                                        .foregroundColor(.gray)
+                                        .onAppear {
+                                            if let user = authService.currentUser {
+                                                print("用户没有头像URL: \(String(describing: user.avatar_url))")
+                                            } else {
+                                                print("当前用户为空")
+                                            }
+                                        }
+                                }
+                            }
+                            .padding(.vertical, 5)
+                            .padding(.horizontal, 10)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                if let user = authService.currentUser {
+                                    Text(user.username)
+                                        .font(.title2)
+                                        .bold()
+                                } else {
+                                    Text("用户")
+                                        .font(.title2)
+                                        .bold()
+                                }
+                            }
+                            Spacer()
+                            
+                            // 添加编辑目标按钮
+                            Button(action: {
+                                isEditingGoals.toggle()
+                            }) {
+                                Text(isEditingGoals ? "完成" : "编辑目标")
+                                    .foregroundColor(.blue)
+                            }
+                        }.padding(.horizontal, 15)
+                        .padding(.vertical, 10)
+                        
+                        // 目标描述
+                        VStack(alignment: .leading, spacing: isEditingGoals ? 12 : 4) {
+                            if isEditingGoals {
+                                // 编辑模式下的目标编辑字段
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("目标设置")
+                                        .font(.headline)
+                                    
+                                    // 短期目标输入
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("短期目标:")
+                                            .font(.subheadline)
+                                        TextField("输入短期目标", text: $viewModel.shortTermGoal)
+                                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                    
+                                    // 长期目标输入
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("长期目标:")
+                                            .font(.subheadline)
+                                        TextField("输入长期目标", text: $viewModel.longTermGoal)
+                                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                    
+                                    // 目标基础数据
+                                    Text("目标基础数据")
+                                        .font(.headline)
+                                        .padding(.top, 8)
+                                    
+                                    // 目标肌肉增长输入
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("目标增肌量(kg):")
+                                            .font(.subheadline)
+                                        HStack {
+                                            TextField("", value: $viewModel.targetMuscleGain, formatter: NumberFormatter())
+                                                .keyboardType(.decimalPad)
+                                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                            Text("kg")
+                                        }
+                                    }
+                                    
+                                    // 初始肌肉重量
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("初始肌肉重量(kg):")
+                                            .font(.subheadline)
+                                        HStack {
+                                            TextField("", value: $viewModel.initialMuscleWeight, formatter: NumberFormatter())
+                                                .keyboardType(.decimalPad)
+                                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                            Text("kg")
+                                        }
+                                    }
+                                    
+                                    // 目标体脂率输入
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("目标体脂率(%):")
+                                            .font(.subheadline)
+                                        HStack {
+                                            TextField("", value: $viewModel.targetBodyFat, formatter: NumberFormatter())
+                                                .keyboardType(.decimalPad)
+                                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                            Text("%")
+                                        }
+                                    }
+                                    
+                                    // 初始体脂率
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("初始体脂率(%):")
+                                            .font(.subheadline)
+                                        HStack {
+                                            TextField("", value: $viewModel.initialBodyFat, formatter: NumberFormatter())
+                                                .keyboardType(.decimalPad)
+                                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                            Text("%")
+                                        }
+                                    }
+                                }
+                                .padding()
+                                .background(Color(UIColor.secondarySystemBackground))
+                                .cornerRadius(10)
+                            } else {
+                                // 查看模式下的目标显示
+                                VStack(spacing: 16) {
+                                    // 短期目标卡片
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        HStack {
+                                            Text("短期目标")
+                                                .font(.headline)
+                                            Spacer()
+                                            Text(shortTermPercentage)
+                                                .font(.headline)
+                                                .foregroundColor(.blue)
+                                        }
+                                        Text(viewModel.shortTermGoal)
+                                            .font(.subheadline)
+                                        ProgressView(value: shortTermProgress, total: 1.0)
+                                            .progressViewStyle(LinearProgressViewStyle(tint: .green))
+                                            .padding(.vertical, 4)
+                                        Text("增肌进度: \(String(format: "%.1f", viewModel.currentMuscleWeight - viewModel.initialMuscleWeight))/\(String(format: "%.1f", viewModel.targetMuscleGain))kg")
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                    }
+                                    .padding()
+                                    .background(Color(UIColor.secondarySystemBackground))
+                                    .cornerRadius(10)
+                                    
+                                    // 长期目标卡片
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        HStack {
+                                            Text("长期目标")
+                                                .font(.headline)
+                                            Spacer()
+                                            Text(longTermPercentage)
+                                                .font(.headline)
+                                                .foregroundColor(.blue)
+                                        }
+                                        Text(viewModel.longTermGoal)
+                                            .font(.subheadline)
+                                        ProgressView(value: longTermProgress, total: 1.0)
+                                            .progressViewStyle(LinearProgressViewStyle(tint: .blue))
+                                            .padding(.vertical, 4)
+                                        Text("减脂进度: 从\(String(format: "%.1f", viewModel.initialBodyFat))%降至\(String(format: "%.1f", viewModel.currentBodyFat))%，目标\(String(format: "%.1f", viewModel.targetBodyFat))%")
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                    }
+                                    .padding()
+                                    .background(Color(UIColor.secondarySystemBackground))
+                                    .cornerRadius(10)
+                                }
+                            }
                         }
+                        .padding(.horizontal, 15)
+                        .padding(.bottom, 20)
+                        
+                        // 卡片区域
+                        VStack(spacing: 20) {
+                            NavigationLink(destination: BodyDataDetailView().environmentObject(viewModel)) {
+                                CardView(title: "身体数据",
+                                         subtitle: "体重: \(String(format: "%.1f", viewModel.currentWeight))kg, 体脂率: \(String(format: "%.1f", viewModel.currentBodyFat))%",
+                                         icon: "heart.fill",
+                                         iconColor: .red) // 红色 - 身体数据
+                            }
+                            NavigationLink(destination: TrainingProgressDetailView().environmentObject(viewModel)) {
+                                CardView(title: "训练进度",
+                                         subtitle: "今日: \(viewModel.muscleGroup)训练，完成\(viewModel.completedSets)/\(viewModel.totalSets)组\(viewModel.trainingType)",
+                                         icon: "figure.walk",
+                                         iconColor: .blue) // 蓝色 - 训练进度
+                            }
+                            NavigationLink(destination: DietDetailView()) {
+                                CardView(title: "饮食情况",
+                                         subtitle: "摄入: 1500 kcal, 蛋白质: 100g",
+                                         icon: "leaf.fill",
+                                         iconColor: .green) // 绿色 - 饮食情况
+                            }
+                            NavigationLink(destination: RecoveryDetailView()) {
+                                CardView(title: "恢复状态",
+                                         subtitle: "睡眠: 7小时, 疲劳感: 4/5",
+                                         icon: "bed.double.fill",
+                                         iconColor: .purple) // 紫色 - 恢复状态
+                            }
+                            NavigationLink(destination: RecipeListView()) {
+                                CardView(title: "菜谱",
+                                         subtitle: "查看和管理菜谱",
+                                         icon: "book.fill",
+                                         iconColor: .orange) // 橙色 - 菜谱
+                            }
+                        }
+                        .padding(.horizontal, 15)
+                        
+                        Spacer()
                     }
-                    .padding(.horizontal)
-                    
-                    // 目标描述
-                    VStack(alignment: .leading, spacing: isEditingGoals ? 12 : 4) {
+                    .navigationTitle("健身追踪器")
+                    // 点击空白处收起键盘
+                    .onTapGesture {
                         if isEditingGoals {
-                            // 编辑模式下的目标编辑字段
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text("目标设置")
-                                    .font(.headline)
-                                
-                                // 短期目标输入
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("短期目标:")
-                                        .font(.subheadline)
-                                    TextField("输入短期目标", text: $viewModel.shortTermGoal)
-                                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                                        .frame(maxWidth: .infinity)
-                                }
-                                
-                                // 长期目标输入
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("长期目标:")
-                                        .font(.subheadline)
-                                    TextField("输入长期目标", text: $viewModel.longTermGoal)
-                                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                                        .frame(maxWidth: .infinity)
-                                }
-                                
-                                // 目标基础数据
-                                Text("目标基础数据")
-                                    .font(.headline)
-                                    .padding(.top, 8)
-                                
-                                // 目标肌肉增长输入
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("目标增肌量(kg):")
-                                        .font(.subheadline)
-                                    HStack {
-                                        TextField("", value: $viewModel.targetMuscleGain, formatter: NumberFormatter())
-                                            .keyboardType(.decimalPad)
-                                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                                        Text("kg")
-                                    }
-                                }
-                                
-                                // 初始肌肉重量
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("初始肌肉重量(kg):")
-                                        .font(.subheadline)
-                                    HStack {
-                                        TextField("", value: $viewModel.initialMuscleWeight, formatter: NumberFormatter())
-                                            .keyboardType(.decimalPad)
-                                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                                        Text("kg")
-                                    }
-                                }
-                                
-                                // 目标体脂率输入
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("目标体脂率(%):")
-                                        .font(.subheadline)
-                                    HStack {
-                                        TextField("", value: $viewModel.targetBodyFat, formatter: NumberFormatter())
-                                            .keyboardType(.decimalPad)
-                                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                                        Text("%")
-                                    }
-                                }
-                                
-                                // 初始体脂率
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("初始体脂率(%):")
-                                        .font(.subheadline)
-                                    HStack {
-                                        TextField("", value: $viewModel.initialBodyFat, formatter: NumberFormatter())
-                                            .keyboardType(.decimalPad)
-                                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                                        Text("%")
-                                    }
-                                }
-                            }
-                            .padding()
-                            .background(Color(UIColor.secondarySystemBackground))
-                            .cornerRadius(10)
-                        } else {
-                            // 查看模式下的目标显示
-                            VStack(spacing: 16) {
-                                // 短期目标卡片
-                                VStack(alignment: .leading, spacing: 8) {
-                                    HStack {
-                                        Text("短期目标")
-                                            .font(.headline)
-                                        Spacer()
-                                        Text(shortTermPercentage)
-                                            .font(.headline)
-                                            .foregroundColor(.blue)
-                                    }
-                                    Text(viewModel.shortTermGoal)
-                                        .font(.subheadline)
-                                    ProgressView(value: shortTermProgress, total: 1.0)
-                                        .progressViewStyle(LinearProgressViewStyle(tint: .green))
-                                        .padding(.vertical, 4)
-                                    Text("增肌进度: \(String(format: "%.1f", viewModel.currentMuscleWeight - viewModel.initialMuscleWeight))/\(String(format: "%.1f", viewModel.targetMuscleGain))kg")
-                                        .font(.caption)
-                                        .foregroundColor(.gray)
-                                }
-                                .padding()
-                                .background(Color(UIColor.secondarySystemBackground))
-                                .cornerRadius(10)
-                                
-                                // 长期目标卡片
-                                VStack(alignment: .leading, spacing: 8) {
-                                    HStack {
-                                        Text("长期目标")
-                                            .font(.headline)
-                                        Spacer()
-                                        Text(longTermPercentage)
-                                            .font(.headline)
-                                            .foregroundColor(.blue)
-                                    }
-                                    Text(viewModel.longTermGoal)
-                                        .font(.subheadline)
-                                    ProgressView(value: longTermProgress, total: 1.0)
-                                        .progressViewStyle(LinearProgressViewStyle(tint: .blue))
-                                        .padding(.vertical, 4)
-                                    Text("减脂进度: 从\(String(format: "%.1f", viewModel.initialBodyFat))%降至\(String(format: "%.1f", viewModel.currentBodyFat))%，目标\(String(format: "%.1f", viewModel.targetBodyFat))%")
-                                        .font(.caption)
-                                        .foregroundColor(.gray)
-                                }
-                                .padding()
-                                .background(Color(UIColor.secondarySystemBackground))
-                                .cornerRadius(10)
-                            }
+                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                         }
                     }
-                    .padding(.horizontal)
-                    .padding(.bottom, 20)
-                    
-                    // 卡片区域
-                    VStack(spacing: 20) {
-                        NavigationLink(destination: BodyDataDetailView().environmentObject(viewModel)) {
-                            CardView(title: "身体数据",
-                                     subtitle: "体重: \(String(format: "%.1f", viewModel.currentWeight))kg, 体脂率: \(String(format: "%.1f", viewModel.currentBodyFat))%",
-                                     icon: "heart.fill")
-                        }
-                        NavigationLink(destination: TrainingProgressDetailView().environmentObject(viewModel)) {
-                            CardView(title: "训练进度",
-                                     subtitle: "今日: \(viewModel.muscleGroup)训练，完成\(viewModel.completedSets)/\(viewModel.totalSets)组\(viewModel.trainingType)",
-                                     icon: "figure.walk")
-                        }
-                        NavigationLink(destination: DietDetailView()) {
-                            CardView(title: "饮食情况",
-                                     subtitle: "摄入: 1500 kcal, 蛋白质: 100g",
-                                     icon: "leaf.fill")
-                        }
-                        NavigationLink(destination: RecoveryDetailView()) {
-                            CardView(title: "恢复状态",
-                                     subtitle: "睡眠: 7小时, 疲劳感: 4/5",
-                                     icon: "bed.double.fill")
-                        }
-                        NavigationLink(destination: RecipeListView()) {
-                            CardView(title: "菜谱",
-                                     subtitle: "查看和管理菜谱",
-                                     icon: "book.fill")
+                    // 添加刷新数据的生命周期函数
+                    .onAppear {
+                        // 仅在首次出现时刷新数据，后续的更新依赖用户通过下拉刷新触发
+                        Task {
+                            await viewModel.refreshData()
                         }
                     }
-                    .padding(.horizontal)
-                    
-                    Spacer()
-                }
-                .navigationTitle("健身追踪器")
-                // 点击空白处收起键盘
-                .onTapGesture {
-                    if isEditingGoals {
-                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                    }
-                }
-                // 添加刷新数据的生命周期函数
-                .onAppear {
-                    // 仅在首次出现时刷新数据，后续的更新依赖用户通过下拉刷新触发
-                    Task {
+                    // 添加下拉刷新功能，但使用更易读的方式
+                    .refreshable {
+                        print("用户手动触发刷新")
                         await viewModel.refreshData()
                     }
                 }
-                // 添加下拉刷新功能，但使用更易读的方式
-                .refreshable {
-                    print("用户手动触发刷新")
-                    await viewModel.refreshData()
-                }
             }
         }
-    }
 }
 
 struct CardView: View {
     var title: String
     var subtitle: String
     var icon: String
+    var iconColor: Color // 添加图标颜色属性
+    
+    // 提供默认颜色的初始化方法，保持向后兼容性
+    init(title: String, subtitle: String, icon: String) {
+        self.title = title
+        self.subtitle = subtitle
+        self.icon = icon
+        self.iconColor = .blue // 默认蓝色
+    }
+    
+    // 添加支持自定义颜色的初始化方法
+    init(title: String, subtitle: String, icon: String, iconColor: Color) {
+        self.title = title
+        self.subtitle = subtitle
+        self.icon = icon
+        self.iconColor = iconColor
+    }
     
     var body: some View {
-        HStack {
+        HStack(spacing: 15) {
+            // 固定宽高的图标容器，使用传入的颜色
             Image(systemName: icon)
-                .font(.system(size: 40))
+                .font(.system(size: 30))
                 .foregroundColor(.white)
-                .padding()
-                .background(Color.blue)
+                .frame(width: 60, height: 60)
+                .background(iconColor) // 使用自定义颜色
                 .cornerRadius(10)
-            VStack(alignment: .leading) {
+            
+            // 固定宽度的文字容器
+            VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.headline)
+                    .lineLimit(1)
                 Text(subtitle)
                     .font(.subheadline)
                     .foregroundColor(.gray)
+                    .lineLimit(2)
             }
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            
             Image(systemName: "chevron.right")
                 .foregroundColor(.gray)
+                .padding(.trailing, 5)
         }
         .padding()
         .background(Color(UIColor.secondarySystemBackground))

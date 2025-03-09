@@ -9,46 +9,91 @@ struct AccountView: View {
     @State private var errorMessage = ""
     @AppStorage("use_biometric") private var useBiometric = false
     @State private var showChangePassword = false
+    @State private var showingAboutSheet = false
     
     var body: some View {
-        NavigationView {
-            Form {
-                UserProfileSection(
-                    authService: authService,
-                    showImagePicker: $showImagePicker,
-                    isUploading: $isUploading,
-                    selectedImage: $selectedImage
-                )
-
-                Section(header: Text("安全设置")) {
-                    if BiometricAuthUtil.shared.biometricType != .none {
-                        Toggle(isOn: $useBiometric) {
-                            Label(
-                                BiometricAuthUtil.shared.biometricType == .faceID ? "使用 Face ID" : "使用 Touch ID",
-                                systemImage: BiometricAuthUtil.shared.biometricType == .faceID ? "faceid" : "touchid"
-                            )
+            VStack(spacing: 0) {
+                    VStack(spacing: 20) {
+                        // 用户资料部分
+                        UserProfileSection(
+                            authService: authService,
+                            showImagePicker: $showImagePicker,
+                            isUploading: $isUploading,
+                            selectedImage: $selectedImage
+                        )
+                        .padding(.top, 40)
+                        
+                        // 安全设置部分
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("安全设置")
+                                .font(.headline)
+                                .padding(.horizontal)
+                            
+                            VStack(spacing: 0) {
+                                if BiometricAuthUtil.shared.biometricType != .none {
+                                    HStack {
+                                        Label(
+                                            BiometricAuthUtil.shared.biometricType == .faceID ? "使用 Face ID" : "使用 Touch ID",
+                                            systemImage: BiometricAuthUtil.shared.biometricType == .faceID ? "faceid" : "touchid"
+                                        )
+                                        Spacer()
+                                        Toggle("", isOn: $useBiometric)
+                                    }
+                                    .padding()
+                                    .background(Color(.secondarySystemGroupedBackground))
+                                    Divider()
+                                }
+                                
+                                NavigationLink(destination: ChangePasswordView()) {
+                                    HStack {
+                                        Label("修改密码", systemImage: "lock")
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                            .foregroundColor(.gray)
+                                    }
+                                    .padding()
+                                    .background(Color(.secondarySystemGroupedBackground))
+                                }
+                            }
+                            .background(Color(.secondarySystemGroupedBackground))
+                            .cornerRadius(10)
+                            .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+                            .padding(.horizontal)
                         }
-                    }
-
-                    NavigationLink(destination: ChangePasswordView()) {
-                        Label("修改密码", systemImage: "lock")
-                    }
-                }
-
-                Section {
-                    Button(action: logout) {
-                        HStack {
-                            Spacer()
+                        
+                        Spacer(minLength: 50) // 添加一个弹性空间，推动退出登录按钮到底部
+                        
+                        // 退出登录部分
+                        Button(action: logout) {
                             Text("退出登录")
                                 .foregroundColor(.red)
-                            Spacer()
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color(.secondarySystemGroupedBackground))
+                                .cornerRadius(10)
+                                .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
                         }
+                        .padding(.horizontal)
+                        .padding(.bottom, 80) // 增加底部间距
                     }
-                }
+                    .frame(minHeight: UIScreen.main.bounds.height - 150) // 设置最小高度，确保内容足够高
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .navigationTitle("账户")
+            .navigationBarTitleDisplayMode(.automatic)
+            .navigationBarItems(trailing: 
+                Button(action: {
+                    showingAboutSheet = true
+                }) {
+                    Image(systemName: "info.circle")
+                        .foregroundColor(.blue)
+                }
+            )
             .sheet(isPresented: $showImagePicker) {
                 ImagePicker(image: $selectedImage)
+            }
+            .sheet(isPresented: $showingAboutSheet) {
+                AboutView()
             }
             .onChange(of: selectedImage) { newImage in
                 if let image = newImage {
@@ -64,7 +109,6 @@ struct AccountView: View {
                     dismissButton: .default(Text("确定"))
                 )
             }
-        }
     }
     
     private func uploadAvatar(_ image: UIImage) async {
@@ -184,6 +228,7 @@ struct UserProfileSection: View {
             }
             .frame(maxWidth: .infinity) // 添加这一行使头像居中
             
+            
             // 用户信息
             if let user = authService.currentUser {
                 Text(user.username)
@@ -191,7 +236,6 @@ struct UserProfileSection: View {
                     .padding(.top, 8)
             }
         }
-        .padding()
     }
 }
 

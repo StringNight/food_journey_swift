@@ -39,16 +39,18 @@ struct ChatView: View {
                 // 语音按钮
                 Button(action: handleVoiceButton) {
                     Image(systemName: chatService.isRecording ? "stop.circle.fill" : "mic.circle.fill")
-                        .font(.system(size: 24))
+                        .font(.system(size: 26))
                         .foregroundColor(chatService.isRecording ? .red : .blue)
+                        .shadow(color: chatService.isRecording ? Color.red.opacity(0.5) : Color.blue.opacity(0.3), radius: 3, x: 0, y: 1)
                 }
                 .disabled(isLoading)
                 
                 // 图片按钮
                 Button(action: { showImagePicker = true }) {
                     Image(systemName: "photo.circle.fill")
-                        .font(.system(size: 24))
+                        .font(.system(size: 26))
                         .foregroundColor(.blue)
+                        .shadow(color: Color.blue.opacity(0.3), radius: 3, x: 0, y: 1)
                 }
                 .disabled(isLoading || chatService.isRecording)
                 
@@ -56,12 +58,19 @@ struct ChatView: View {
                 TextField("输入消息...", text: $inputText)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .disabled(chatService.isRecording)
+                    .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
                 
-                // 发送按钮
+                // 发送按钮 - 改为小一点的正方形图标按钮
                 Button(action: sendMessage) {
-                    Image(systemName: "paperplane.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(.blue)
+                    Image(systemName: "paperplane.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(.white)
+                        .frame(width: 36, height: 36)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(inputText.isEmpty || isLoading || chatService.isRecording ? Color.blue.opacity(0.5) : Color.blue)
+                        )
+                        .shadow(color: Color.blue.opacity(0.3), radius: 3, x: 0, y: 1)
                 }
                 .disabled(inputText.isEmpty || isLoading || chatService.isRecording)
             }
@@ -171,8 +180,9 @@ struct MessageView: View {
                         .background(message.isUser ? Color.blue : Color.gray.opacity(0.2))
                         .foregroundColor(message.isUser ? .white : .primary)
                         .cornerRadius(16)
-                        .animation(.easeInOut(duration: 0.2), value: message.content) // 添加平滑动画
-                        .transition(.opacity) // 添加过渡效果
+                        .animation(.easeInOut(duration: 0.2), value: message.content)
+                        .transition(.opacity)
+                        .shadow(color: message.isUser ? Color.blue.opacity(0.3) : Color.gray.opacity(0.2), radius: 3, x: 0, y: 2)
                 
                 // 在MessageView中修改图片显示部分
                 case .image:
@@ -183,6 +193,7 @@ struct MessageView: View {
                             .scaledToFit()
                             .frame(maxWidth: 200)
                             .cornerRadius(16)
+                            .shadow(color: Color.black.opacity(0.2), radius: 3, x: 0, y: 2)
                     } else if let imageUrl = message.imageUrl {
                         // 如果没有本地图片，则使用URL加载
                         AsyncImage(url: URL(string: imageUrl)) { phase in
@@ -195,6 +206,7 @@ struct MessageView: View {
                                     .scaledToFit()
                                     .frame(maxWidth: 200)
                                     .cornerRadius(16)
+                                    .shadow(color: Color.black.opacity(0.2), radius: 3, x: 0, y: 2)
                             case .failure:
                                 Image(systemName: "photo")
                                     .foregroundColor(.gray)
@@ -220,6 +232,7 @@ struct MessageView: View {
                             .foregroundColor(message.isUser ? .white : .primary)
                             .cornerRadius(16)
                         }
+                        .shadow(color: message.isUser ? Color.blue.opacity(0.3) : Color.gray.opacity(0.2), radius: 3, x: 0, y: 2)
                     }
                 }
             }
