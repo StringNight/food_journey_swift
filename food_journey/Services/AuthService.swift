@@ -5,6 +5,9 @@ import SwiftUI
 @MainActor
 class AuthService: ObservableObject {
     static let shared = AuthService()
+    
+    // 添加头像缓存
+    @Published var cachedAvatars: [String: UIImage] = [:]
     private let networkService = NetworkService.shared
     
     @Published var isAuthenticated = false
@@ -156,6 +159,17 @@ class AuthService: ObservableObject {
     
     private func storeCredentials(username: String, password: String) async throws {
         try KeychainManager.shared.save(password, for: username)
+    }
+    
+    // 添加获取缓存头像的方法
+    // 获取缓存头像的方法
+    func getCachedAvatar(for url: String) -> UIImage? {
+        return cachedAvatars[url]
+    }
+    
+    // 缓存头像的方法
+    func cacheAvatar(_ image: UIImage, for url: String) {
+        cachedAvatars[url] = image
     }
 }
 

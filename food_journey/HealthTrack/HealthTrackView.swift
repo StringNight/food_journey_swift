@@ -245,34 +245,49 @@ struct HealthTrackView: View {
                                 if let user = authService.currentUser, let avatarUrl = user.avatar_url, !avatarUrl.isEmpty {
                                     // 显示已上传的头像
                                     let fullUrl = getFullAvatarUrl(avatarUrl)
-                                    AsyncImage(url: URL(string: fullUrl)) { phase in
-                                        switch phase {
-                                        case .empty:
-                                            ProgressView()
-                                                .onAppear {
-                                                    print("正在加载头像: \(fullUrl)")
-                                                }
-                                        case .success(let image):
-                                            image
-                                                .resizable()
-                                                .scaledToFill()
-                                                .onAppear {
-                                                    print("头像加载成功")
-                                                }
-                                        case .failure(let error):
-                                            // 加载失败时显示默认头像
-                                            Image(systemName: "person.crop.circle")
-                                                .resizable()
-                                                .foregroundColor(.gray)
-                                                .onAppear {
-                                                    print("头像加载失败: \(error.localizedDescription), URL: \(fullUrl)")
-                                                }
-                                        @unknown default:
-                                            EmptyView()
+                                    
+                                    // 先检查缓存中是否有头像
+                                    if let cachedImage = authService.getCachedAvatar(for: fullUrl) {
+                                        Image(uiImage: cachedImage)
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 60, height: 60)
+                                            .clipShape(Circle())
+                                    } else {
+                                        // 如果缓存中没有，则从网络加载
+                                        AsyncImage(url: URL(string: fullUrl)) { phase in
+                                            switch phase {
+                                            case .empty:
+                                                ProgressView()
+                                                    .onAppear {
+                                                        print("正在加载头像: \(fullUrl)")
+                                                    }
+                                            case .success(let image):
+                                                image
+                                                    .resizable()
+                                                    .scaledToFill()
+                                                    .onAppear {
+                                                        print("头像加载成功")
+                                                        // 将加载成功的图像转换为UIImage并缓存
+                                                        if let uiImage = imageToUIImage(image) {
+                                                            authService.cacheAvatar(uiImage, for: fullUrl)
+                                                        }
+                                                    }
+                                            case .failure(let error):
+                                                // 加载失败时显示默认头像
+                                                Image(systemName: "person.crop.circle")
+                                                    .resizable()
+                                                    .foregroundColor(.gray)
+                                                    .onAppear {
+                                                        print("头像加载失败: \(error.localizedDescription), URL: \(fullUrl)")
+                                                    }
+                                            @unknown default:
+                                                EmptyView()
+                                            }
                                         }
+                                        .frame(width: 60, height: 60)
+                                        .clipShape(Circle())
                                     }
-                                    .frame(width: 60, height: 60)
-                                    .clipShape(Circle())
                                 } else {
                                     // 没有头像时显示默认头像
                                     Image(systemName: "person.crop.circle")
@@ -571,4 +586,10 @@ struct HealthTrackView_Previews: PreviewProvider {
     static var previews: some View {
         HealthTrackView()
     }
+}
+
+// 在 HealthTrackView 外部添加这个辅助函数
+@MainActor func imageToUIImage(_ image: Image) -> UIImage? {
+    let renderer = ImageRenderer(content: image)
+    return renderer.uiImage
 }
