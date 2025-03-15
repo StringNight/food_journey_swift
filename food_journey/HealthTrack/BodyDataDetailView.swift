@@ -144,8 +144,15 @@ struct BodyDataDetailView: View {
         }
         .navigationTitle("身体数据详情")
         .onAppear {
-            // 当视图出现时，从ViewModel加载数据
-            loadDataFromViewModel()
+            // 当视图出现时，先从后端刷新数据，然后再加载到本地状态变量
+            Task {
+                print("身体数据详情视图出现，开始刷新数据")
+                // 先刷新ViewModel中的数据
+                await viewModel.refreshData()
+                // 然后再从ViewModel加载到本地状态变量
+                loadDataFromViewModel()
+                print("身体数据已从ViewModel加载: 体重=\(weight), 体脂=\(bodyFatPercentage), 肌肉量=\(muscleMass)")
+            }
         }
     }
     
