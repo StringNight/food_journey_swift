@@ -7,326 +7,269 @@ struct TrainingProgressDetailView: View {
     // 状态变量用于控制编辑模式
     @State private var isEditing = false
     
-    // 用于存储用户输入的训练数据
-    @State private var trainingType: String = "深蹲"
-    @State private var trainingSet: String = "3"
-    @State private var trainingReps: String = "10"
-    @State private var trainingWeight: String = "60"
-    @State private var completedSets: String = "3"
-    @State private var totalSets: String = "5"
-    @State private var muscleGroup: String = "腿部"
-    @State private var trainingDetail: String = "重点锻炼了股四头肌和腿后肌"
-    @State private var restAdvice: String = "休息48小时，进行腿部拉伸"
-    @State private var nextTraining: String = "背部训练"
+    // 移除本地状态变量，改用 ViewModel 中的数据
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                HStack {
-                    Text("训练进度")
-                        .font(.title)
-                        .bold()
-                    
-                    Spacer()
-                    
-                    // 添加编辑按钮
-                    Button(action: {
-                        isEditing.toggle()
-                    }) {
-                        Text(isEditing ? "取消" : "编辑")
-                            .foregroundColor(.blue)
-                    }
-                    
-                    if isEditing {
-                        // 保存按钮
+        ZStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    HStack {
+                        Text("训练进度")
+                            .font(.title)
+                            .bold()
+                        
+                        Spacer()
+                        
+                        // 添加编辑按钮
                         Button(action: {
-                            // 这里添加保存数据的逻辑
-                            Task {
-                                await saveData()
+                            isEditing.toggle()
+                            // 如果取消编辑，重新加载数据
+                            if !isEditing {
+                                Task {
+                                    await viewModel.forceRefreshData()
+                                }
                             }
-                            isEditing = false
                         }) {
-                            Text("保存")
-                                .foregroundColor(.green)
+                            Text(isEditing ? "取消" : "编辑")
+                                .foregroundColor(.blue)
+                        }
+                        
+                        if isEditing {
+                            // 保存按钮
+                            Button(action: {
+                                // 使用 ViewModel 的保存方法
+                                Task {
+                                    await viewModel.saveTrainingData()
+                                }
+                                isEditing = false
+                            }) {
+                                Text("保存")
+                                    .foregroundColor(.green)
+                            }
                         }
                     }
-                }
-                
-                // 今日训练详情
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("今日训练")
-                        .font(.headline)
                     
-                    if isEditing {
-                        // 编辑模式下的输入表单
-                        HStack {
-                            Text("训练类型:")
-                                .frame(width: 80, alignment: .leading)
-                            TextField("训练类型", text: $trainingType)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                        }
+                    // 当前训练卡片
+                    VStack(alignment: .leading, spacing: 15) {
+                        Text("当前训练")
+                            .font(.headline)
                         
-                        HStack {
-                            Text("组数:")
-                                .frame(width: 80, alignment: .leading)
-                            TextField("组数", text: $trainingSet)
-                                .keyboardType(.numberPad)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                        if isEditing {
+                            // 编辑模式下的训练类型和肌肉群
+                            VStack(spacing: 15) {
+                                // 训练类型
+                                HStack {
+                                    Text("训练类型:")
+                                        .frame(width: 100, alignment: .leading)
+                                    TextField("例如：深蹲、卧推", text: $viewModel.trainingType)
+                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                }
+                                
+                                // 肌肉群
+                                HStack {
+                                    Text("目标肌群:")
+                                        .frame(width: 100, alignment: .leading)
+                                    TextField("例如：腿部、胸部", text: $viewModel.muscleGroup)
+                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                }
+                                
+                                // 完成组数
+                                HStack {
+                                    Text("完成组数:")
+                                        .frame(width: 100, alignment: .leading)
+                                    Stepper("\(viewModel.completedSets)/\(viewModel.totalSets) 组", value: $viewModel.completedSets, in: 0...viewModel.totalSets)
+                                }
+                                
+                                // 总组数
+                                HStack {
+                                    Text("总组数:")
+                                        .frame(width: 100, alignment: .leading)
+                                    Stepper("\(viewModel.totalSets) 组", value: $viewModel.totalSets, in: 1...10)
+                                }
+                                
+                                // 训练详情
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text("训练详情:")
+                                        .frame(width: 100, alignment: .leading)
+                                    TextEditor(text: $viewModel.trainingDetail)
+                                        .frame(height: 100)
+                                        .padding(4)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 5)
+                                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                        )
+                                }
+                            }
+                        } else {
+                            // 查看模式下的训练信息
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack {
+                                    Text("训练类型:")
+                                        .foregroundColor(.gray)
+                                    Text(viewModel.trainingType)
+                                        .bold()
+                                }
+                                
+                                HStack {
+                                    Text("目标肌群:")
+                                        .foregroundColor(.gray)
+                                    Text(viewModel.muscleGroup)
+                                        .bold()
+                                }
+                                
+                                HStack {
+                                    Text("训练进度:")
+                                        .foregroundColor(.gray)
+                                    Text("\(viewModel.completedSets)/\(viewModel.totalSets) 组")
+                                        .bold()
+                                }
+                                
+                                // 进度条
+                                ProgressView(value: Double(viewModel.completedSets), total: Double(max(1, viewModel.totalSets)))
+                                    .progressViewStyle(LinearProgressViewStyle())
+                                    .tint(.blue)
+                                    .padding(.vertical, 5)
+                                
+                                Text("训练详情:")
+                                    .foregroundColor(.gray)
+                                Text(viewModel.trainingDetail)
+                                    .padding(.leading, 5)
+                            }
                         }
+                    }
+                    .padding()
+                    .background(Color(UIColor.secondarySystemBackground))
+                    .cornerRadius(10)
+                    
+                    // 恢复建议卡片
+                    VStack(alignment: .leading, spacing: 15) {
+                        Text("恢复建议")
+                            .font(.headline)
                         
-                        HStack {
-                            Text("每组次数:")
-                                .frame(width: 80, alignment: .leading)
-                            TextField("每组次数", text: $trainingReps)
-                                .keyboardType(.numberPad)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                        if isEditing {
+                            // 编辑模式下的建议
+                            VStack(spacing: 15) {
+                                // 休息建议
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text("休息建议:")
+                                        .frame(alignment: .leading)
+                                    TextEditor(text: $viewModel.restAdvice)
+                                        .frame(height: 80)
+                                        .padding(4)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 5)
+                                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                        )
+                                }
+                                
+                                // 下次训练建议
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text("下次训练:")
+                                        .frame(alignment: .leading)
+                                    TextField("例如：背部训练", text: $viewModel.nextTraining)
+                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                }
+                            }
+                        } else {
+                            // 查看模式下的建议
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("休息建议:")
+                                    .foregroundColor(.gray)
+                                Text(viewModel.restAdvice)
+                                    .padding(.leading, 5)
+                                
+                                Text("下次训练:")
+                                    .foregroundColor(.gray)
+                                Text(viewModel.nextTraining)
+                                    .bold()
+                                    .padding(.leading, 5)
+                            }
                         }
+                    }
+                    .padding()
+                    .background(Color(UIColor.secondarySystemBackground))
+                    .cornerRadius(10)
+                    
+                    // 历史训练记录（占位）
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("历史训练记录")
+                            .font(.headline)
                         
-                        HStack {
-                            Text("重量(kg):")
-                                .frame(width: 80, alignment: .leading)
-                            TextField("重量", text: $trainingWeight)
-                                .keyboardType(.decimalPad)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                        // 示例历史记录
+                        ForEach(["胸部训练 (2天前)", "背部训练 (4天前)", "腿部训练 (6天前)"], id: \.self) { record in
+                            HStack {
+                                Circle()
+                                    .fill(Color.blue)
+                                    .frame(width: 10, height: 10)
+                                Text(record)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .foregroundColor(.gray)
+                            }
+                            .padding(.vertical, 5)
                         }
-                    } else {
-                        Text("\(trainingType): \(trainingSet)组 x \(trainingReps)次, 重量 \(trainingWeight)kg")
+                    }
+                    .padding()
+                    .background(Color(UIColor.secondarySystemBackground))
+                    .cornerRadius(10)
+                    
+                    // 错误显示区域
+                    if let error = viewModel.trainingDataLoadError {
+                        Text("加载数据失败: \(error)")
+                            .foregroundColor(.red)
+                            .padding()
+                            .background(Color.red.opacity(0.1))
+                            .cornerRadius(10)
                     }
                 }
                 .padding()
-                .background(Color(UIColor.secondarySystemBackground))
-                .cornerRadius(10)
-                
-                // 训练完成度
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("训练完成度")
-                        .font(.headline)
-                    
-                    ProgressView(value: Double(completedSets) ?? 0, total: Double(totalSets) ?? 1)
-                        .progressViewStyle(LinearProgressViewStyle(tint: .green))
-                        .padding(.vertical)
-                    
-                    if isEditing {
-                        HStack {
-                            Text("已完成组数:")
-                                .frame(width: 100, alignment: .leading)
-                            TextField("已完成组数", text: $completedSets)
-                                .keyboardType(.numberPad)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                        }
-                        
-                        HStack {
-                            Text("总组数:")
-                                .frame(width: 100, alignment: .leading)
-                            TextField("总组数", text: $totalSets)
-                                .keyboardType(.numberPad)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                        }
-                    } else {
-                        Text("完成\(completedSets)/\(totalSets)组")
-                            .font(.subheadline)
-                            .foregroundColor(.gray)
-                    }
-                }
-                .padding()
-                .background(Color(UIColor.secondarySystemBackground))
-                .cornerRadius(10)
-                
-                // 肌肉群分析
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("肌肉群分析")
-                        .font(.headline)
-                    
-                    if isEditing {
-                        HStack {
-                            Text("训练肌群:")
-                                .frame(width: 100, alignment: .leading)
-                            TextField("训练肌群", text: $muscleGroup)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                        }
-                        
-                        HStack {
-                            Text("训练细节:")
-                                .frame(width: 100, alignment: .leading)
-                            TextField("训练细节", text: $trainingDetail)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                        }
-                    } else {
-                        Text("今天你训练了\(muscleGroup)，\(trainingDetail)。")
-                    }
-                }
-                .padding()
-                .background(Color(UIColor.secondarySystemBackground))
-                .cornerRadius(10)
-                
-                // 休息与拉伸建议
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("休息与拉伸建议")
-                        .font(.headline)
-                    
-                    if isEditing {
-                        TextField("休息与拉伸建议", text: $restAdvice)
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                    } else {
-                        Text("今天进行了大肌群训练，建议\(restAdvice)。")
-                    }
-                }
-                .padding()
-                .background(Color(UIColor.secondarySystemBackground))
-                .cornerRadius(10)
-                
-                // 接下来的训练计划
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("接下来的训练")
-                        .font(.headline)
-                    
-                    if isEditing {
-                        TextField("下次训练计划", text: $nextTraining)
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                    } else {
-                        Text("明天进行\(nextTraining)。")
-                    }
-                }
-                .padding()
-                .background(Color(UIColor.secondarySystemBackground))
-                .cornerRadius(10)
-                
-                Spacer()
             }
-            .padding()
-            // 点击空白处收起键盘
-            .onTapGesture {
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            .onAppear {
+                // 视图出现时加载最新数据
+                Task {
+                    await viewModel.forceRefreshData()
+                }
+            }
+            
+            // 保存中覆盖层
+            if viewModel.isTrainingDataSaving {
+                Color.black.opacity(0.4)
+                    .edgesIgnoringSafeArea(.all)
+                
+                VStack {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .padding()
+                    Text("正在保存...")
+                        .foregroundColor(.white)
+                        .font(.headline)
+                }
+                .frame(width: 150, height: 150)
+                .background(Color.gray.opacity(0.7))
+                .cornerRadius(10)
+            }
+            
+            // 保存成功覆盖层
+            if viewModel.showTrainingDataSaveSuccess {
+                Color.black.opacity(0.4)
+                    .edgesIgnoringSafeArea(.all)
+                
+                VStack {
+                    Image(systemName: "checkmark.circle.fill")
+                        .resizable()
+                        .frame(width: 50, height: 50)
+                        .foregroundColor(.green)
+                        .padding()
+                    Text("保存成功")
+                        .foregroundColor(.white)
+                        .font(.headline)
+                }
+                .frame(width: 150, height: 150)
+                .background(Color.gray.opacity(0.7))
+                .cornerRadius(10)
             }
         }
-        .navigationTitle("训练详情")
-        .onAppear {
-            // 当视图出现时，从ViewModel加载数据
-            loadDataFromViewModel()
-        }
-    }
-    
-    // 从ViewModel加载数据
-    private func loadDataFromViewModel() {
-        trainingType = viewModel.trainingType
-        completedSets = String(viewModel.completedSets)
-        totalSets = String(viewModel.totalSets)
-        muscleGroup = viewModel.muscleGroup
-    }
-    
-    // 保存数据的方法
-    private func saveData() async {
-        // 转换输入数据为适当的类型
-        let trainingSetInt = Int(trainingSet) ?? 0
-        let trainingRepsInt = Int(trainingReps) ?? 0
-        let trainingWeightDouble = Double(trainingWeight) ?? 0
-        let trainingProgressValue = Double(completedSets) ?? 0
-        
-        // 记录训练数据 - 使用与后端对应的ExerciseRecord结构
-        let exerciseSetData: [String: Any] = [
-            "reps": trainingRepsInt,
-            "weight": trainingWeightDouble
-        ]
-        
-        let exerciseData: [String: Any] = [
-            "id": UUID().uuidString, // 生成一个临时ID，后端会替换
-            "user_id": "current_user", // 后端会根据认证信息替换
-            "exercise_name": trainingType,
-            "exercise_type": "力量", // 假设是力量训练
-            "sets": [exerciseSetData],
-            "calories_burned": 0.0,
-            "notes": "用户记录的训练",
-            "recorded_at": ISO8601DateFormatter().string(from: Date())
-        ]
-        
-        do {
-            // 将字典转为JSON数据
-            guard let jsonData = try? JSONSerialization.data(withJSONObject: exerciseData) else {
-                print("数据序列化失败")
-                return
-            }
-            
-            // 使用async/await方式调用NetworkService
-            let response: FoodJourneyModels.ExerciseResponse = try await NetworkService.shared.request(
-                endpoint: "/profile/exercise",
-                method: "POST",
-                body: jsonData,
-                requiresAuth: true
-            )
-            
-            // 成功处理
-            print("训练数据更新成功: \(response.id)")
-            
-            // 更新训练偏好 - 但不触发额外刷新
-            await updateTrainingPreferences(
-                trainingType: trainingType,
-                trainingProgress: trainingProgressValue,
-                muscleGroup: muscleGroup,
-                trainingDetail: trainingDetail
-            )
-            
-            // 更新ViewModel中的数据 - 直接更新，避免额外的网络请求
-            await MainActor.run {
-                viewModel.trainingType = trainingType
-                viewModel.completedSets = Int(completedSets) ?? 0
-                viewModel.totalSets = Int(totalSets) ?? 0
-                viewModel.muscleGroup = muscleGroup
-                
-                // 显示保存成功的反馈提示
-                isEditing = false
-            }
-            
-        } catch {
-            // 错误处理
-            print("训练数据更新失败: \(error.localizedDescription)")
-            // 可以在这里添加错误处理，例如显示错误提示
-            await MainActor.run {
-                // 显示错误提示
-            }
-        }
-        
-        print("保存训练数据: 类型\(trainingType), 组数\(trainingSet)x\(trainingReps), 重量\(trainingWeight)kg")
-    }
-    
-    // 更新训练偏好
-    private func updateTrainingPreferences(trainingType: String, trainingProgress: Double, muscleGroup: String, trainingDetail: String) async {
-        // 准备请求数据
-        let fitnessPreferencesData: [String: Any] = [
-            "training_type": trainingType,
-            "training_progress": trainingProgress,
-            "muscle_group_analysis": [
-                muscleGroup: trainingDetail
-            ]
-        ]
-        
-        do {
-            // 将字典转为JSON数据
-            guard let jsonData = try? JSONSerialization.data(withJSONObject: fitnessPreferencesData) else {
-                print("训练偏好数据序列化失败")
-                return
-            }
-            
-            // 使用async/await方式调用NetworkService
-            let response: FoodJourneyModels.UpdateResponse = try await NetworkService.shared.request(
-                endpoint: "/profile/fitness",
-                method: "PUT",
-                body: jsonData,
-                requiresAuth: true
-            )
-            
-            print("训练偏好更新成功: \(response.message)")
-            
-            // 更新ViewModel中的数据 - 直接更新本地数据，避免额外的网络请求
-            await MainActor.run {
-                viewModel.trainingType = trainingType
-                viewModel.muscleGroup = muscleGroup
-            }
-            
-            // 不再调用刷新，因为我们已经手动更新了视图模型数据
-            // await viewModel.refreshData()
-        } catch {
-            print("训练偏好更新失败: \(error.localizedDescription)")
-        }
+        .navigationTitle("训练进度")
     }
 }
 

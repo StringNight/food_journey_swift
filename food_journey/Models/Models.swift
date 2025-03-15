@@ -90,6 +90,7 @@ public enum FoodJourneyModels {
         public let protein: Double?
         public let carbs: Double?
         public let fat: Double?
+        public let fiber: Double?
         
         enum CodingKeys: String, CodingKey {
             case food_name = "food_name"
@@ -98,6 +99,7 @@ public enum FoodJourneyModels {
             case protein
             case carbs
             case fat
+            case fiber
         }
     }
     
@@ -178,18 +180,28 @@ public enum FoodJourneyModels {
     }
     
     public struct RecipeCreate: Codable {
-            let title: String
-            let ingredients: [Ingredient]
-            let steps: [Step]
-            let nutrition: Nutrition
-            let cooking_time: Int
-            let difficulty: String
-            let tags: [String]?
+            public let title: String
+            public let ingredients: [Ingredient]
+            public let steps: [Step]
+            public let nutrition: Nutrition
+            public let cooking_time: Int
+            public let difficulty: String
+            public let tags: [String]?
+            
+            public init(title: String, ingredients: [Ingredient], steps: [Step], nutrition: Nutrition, cooking_time: Int, difficulty: String, tags: [String]?) {
+                self.title = title
+                self.ingredients = ingredients
+                self.steps = steps
+                self.nutrition = nutrition
+                self.cooking_time = cooking_time
+                self.difficulty = difficulty
+                self.tags = tags
+            }
     }
         
-    struct RecipeResponse: Codable {
-        let schema_version: String
-        let recipe: Recipe?
+    public struct RecipeResponse: Codable {
+        public let schema_version: String
+        public let recipe: Recipe?
     }
 
     // MARK: - 身份验证请求

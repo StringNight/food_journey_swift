@@ -10,6 +10,9 @@ class RecipeService: ObservableObject {
     @Published var searchResults: [Recipe] = []
     @Published var isSearching = false
     
+    @Published var filteredRecipes: [Recipe] = []
+    private var allRecipes: [Recipe] = []
+    
     private init() {}
     
     struct RecipeResponse: Codable {
@@ -32,7 +35,7 @@ class RecipeService: ObservableObject {
             endpoint: "/recipes",
             requiresAuth: true
         )
-        recipes = response.recipes
+        setRecipes(response.recipes)
     }
     
     /// 获取用户收藏的菜谱
@@ -63,9 +66,11 @@ class RecipeService: ObservableObject {
         )
         
         if page == 1 {
-            searchResults = response.recipes
+            setRecipes(response.recipes)
         } else {
-            searchResults.append(contentsOf: response.recipes)
+            // 在搜索结果附加的情况下，我们需要手动更新allRecipes和filteredRecipes
+            allRecipes.append(contentsOf: response.recipes)
+            filteredRecipes.append(contentsOf: response.recipes)
         }
     }
     
@@ -119,6 +124,30 @@ class RecipeService: ObservableObject {
         // 添加新创建的菜谱到列表
         if let newRecipe = response.recipe {
             recipes.insert(newRecipe, at: 0)
+            allRecipes.insert(newRecipe, at: 0)
+            filteredRecipes.insert(newRecipe, at: 0)
         }
+    }
+    
+    /// 按类别过滤菜谱
+    /// 根据用户选择的类别标签过滤已加载的菜谱列表
+    func filterRecipes(by categories: Set<String>) {
+        if categories.isEmpty {
+            // 如果没有选择类别，显示所有菜谱
+            filteredRecipes = allRecipes
+        } else {
+            // 过滤包含选定类别的菜谱
+            filteredRecipes = allRecipes.filter { recipe in
+                guard let tags = recipe.tags else { return false }
+                return !Set(tags).isDisjoint(with: categories)
+            }
+        }
+    }
+    
+    /// 设置所有菜谱，同时更新筛选后的菜谱
+    private func setRecipes(_ newRecipes: [Recipe]) {
+        allRecipes = newRecipes
+        filteredRecipes = newRecipes
+        recipes = newRecipes // 保持兼容性
     }
 }

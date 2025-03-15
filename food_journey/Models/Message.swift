@@ -7,7 +7,7 @@ enum MessageType {
     case voice
 }
 
-class Message: Identifiable, ObservableObject {
+class Message: Identifiable, ObservableObject, Equatable {
     let id: String
     let type: MessageType
     @Published var content: String
@@ -30,5 +30,11 @@ class Message: Identifiable, ObservableObject {
         self.voiceUrl = voiceUrl
         self.transcribedText = transcribedText
         self.localImage = localImage
+    }
+    
+    // 实现Equatable协议的静态方法
+    static func == (lhs: Message, rhs: Message) -> Bool {
+        // 主要基于id进行比较，因为id应该是唯一的标识符
+        return lhs.id == rhs.id
     }
 }

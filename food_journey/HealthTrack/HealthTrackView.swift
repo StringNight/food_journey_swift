@@ -91,85 +91,397 @@ class HealthTrackViewModel: ObservableObject {
     @Published var totalSets: Int = 5
     @Published var muscleGroup: String = "腿部"
     
-    // 添加防抖动机制
+    // 饮食数据 - 从DietDetailView迁移
+    @Published var breakfast: String = "鸡蛋、全麦面包、牛奶"
+    @Published var lunch: String = "鸡肉沙拉、米饭"
+    @Published var dinner: String = "鱼类、蔬菜"
+    @Published var calories: String = "1500"
+    @Published var protein: String = "100"
+    @Published var fat: String = "50"
+    @Published var carbs: String = "150"
+    @Published var caloriesTarget: String = "2000"
+    @Published var dietAdvice: String = "增加蛋白质摄入，可以加餐鸡胸肉或蛋白粉。"
+    
+    // 饮食数据状态
+    @Published var isDietDataLoading: Bool = false
+    @Published var isDietDataSaving: Bool = false
+    @Published var showDietSaveSuccess: Bool = false
+    @Published var dietLoadError: String? = nil
+    
+    // 身体数据 - 从BodyDataDetailView迁移
+    @Published var bmr: String = "1800" // 基础代谢率
+    
+    // 身体数据状态
+    @Published var isBodyDataSaving: Bool = false
+    @Published var showBodyDataSaveSuccess: Bool = false
+    @Published var bodyDataLoadError: String? = nil
+    
+    // 训练进度详细数据 - 从TrainingProgressDetailView迁移
+    @Published var trainingSet: String = "3"
+    @Published var trainingReps: String = "10"
+    @Published var trainingWeight: String = "60"
+    @Published var trainingDetail: String = "重点锻炼了股四头肌和腿后肌"
+    @Published var restAdvice: String = "休息48小时，进行腿部拉伸"
+    @Published var nextTraining: String = "背部训练"
+    
+    // 训练数据状态
+    @Published var isTrainingDataSaving: Bool = false
+    @Published var showTrainingDataSaveSuccess: Bool = false
+    @Published var trainingDataLoadError: String? = nil
+    
+    // 恢复数据 - 从RecoveryDetailView迁移
+    @Published var sleepHours: String = "7"
+    @Published var deepSleepPercentage: String = "50"
+    @Published var fatigueRating: Int = 4
+    @Published var recoveryAdvice: String = "根据你的疲劳感，建议进行轻柔的瑜伽或拉伸。"
+    
+    // 恢复数据状态
+    @Published var isRecoveryDataSaving: Bool = false
+    @Published var showRecoveryDataSaveSuccess: Bool = false
+    @Published var recoveryDataLoadError: String? = nil
+    
+    // 添加加载状态标志
+    @Published var isLoading: Bool = false
+    
+    // 防抖动机制
     private var lastRefreshTime: Date = Date(timeIntervalSince1970: 0)
-    private let minRefreshInterval: TimeInterval = 5.0 // 最小刷新间隔5秒
+    private let minRefreshInterval: TimeInterval = 5.0 // 增加最小刷新间隔到30秒
     
     // 添加一个标志，跟踪是否已经加载过数据
     private var hasLoadedInitialData: Bool = false
     
-    // 刷新数据
+    // 添加用于取消任务的ID
+    private var refreshTask: Task<Void, Never>? = nil
+    private var dietRefreshTask: Task<Void, Never>? = nil
+    private var bodyDataRefreshTask: Task<Void, Never>? = nil
+    private var trainingDataRefreshTask: Task<Void, Never>? = nil
+    private var recoveryDataRefreshTask: Task<Void, Never>? = nil
+    
+    // 刷新数据 - 增加防抖动逻辑和错误处理
     func refreshData() async {
+        // 取消任何正在进行的刷新任务
+        refreshTask?.cancel()
+        
         // 检查是否需要刷新 - 如果已经加载过初始数据且距离上次刷新时间不足最小间隔，则跳过
         let now = Date()
         if hasLoadedInitialData && now.timeIntervalSince(lastRefreshTime) < minRefreshInterval {
-            print("跳过刷新：刷新间隔过短")
+            print("跳过刷新：刷新间隔过短，上次刷新时间：\(lastRefreshTime)，当前时间：\(now)")
             return
         }
         
-        // 更新最后刷新时间
-        lastRefreshTime = now
+        // 更新UI状态以指示正在加载
+        await MainActor.run {
+            isLoading = true
+        }
         
-        do {
-            // 获取用户完整档案数据
-            let profileResponse: FoodJourneyModels.CompleteProfile = try await NetworkService.shared.request(
-                endpoint: "/profile",
-                method: "GET",
-                requiresAuth: true
-            )
+        // 创建新的刷新任务
+        refreshTask = Task {
+            // 更新最后刷新时间
+            lastRefreshTime = now
             
-            // 更新用户身体数据
-            await MainActor.run {
-                // 更新身体数据
-                if let weight = profileResponse.health_profile.weight {
-                    self.currentWeight = weight
-                }
-                if let bodyFat = profileResponse.health_profile.body_fat_percentage {
-                    self.currentBodyFat = bodyFat
-                }
-                if let muscleMass = profileResponse.health_profile.muscle_mass {
-                    self.currentMuscleWeight = muscleMass
+            do {
+                // 获取用户完整档案数据
+                let profileResponse: FoodJourneyModels.CompleteProfile = try await NetworkService.shared.request(
+                    endpoint: "/profile",
+                    method: "GET",
+                    requiresAuth: true
+                )
+                
+                // 确保任务没有被取消
+                if Task.isCancelled {
+                    return
                 }
                 
-                // 更新训练相关数据
-                if let trainingType = profileResponse.fitness_profile.training_type {
-                    self.trainingType = trainingType
+                // 更新用户身体数据
+                await MainActor.run {
+                    // 更新身体数据
+                    if let weight = profileResponse.health_profile.weight {
+                        self.currentWeight = weight
+                    }
+                    if let bodyFat = profileResponse.health_profile.body_fat_percentage {
+                        self.currentBodyFat = bodyFat
+                    }
+                    if let muscleMass = profileResponse.health_profile.muscle_mass {
+                        self.currentMuscleWeight = muscleMass
+                    }
+                    if let bmr = profileResponse.health_profile.bmr {
+                        self.bmr = String(bmr)
+                    }
+                    
+                    // 更新训练相关数据
+                    if let trainingType = profileResponse.fitness_profile.training_type {
+                        self.trainingType = trainingType
+                    }
+                    
+                    // 从肌肉群分析中获取第一个肌肉群
+                    if let muscleGroupAnalysis = profileResponse.fitness_profile.muscle_group_analysis,
+                       let firstKey = muscleGroupAnalysis.keys.first {
+                        self.muscleGroup = firstKey
+                    }
+                    
+                    // 更新睡眠和恢复数据
+                    if let sleepDuration = profileResponse.fitness_profile.sleep_duration {
+                        self.sleepHours = String(format: "%.1f", sleepDuration)
+                    }
+                    if let deepSleepPercentage = profileResponse.fitness_profile.deep_sleep_percentage {
+                        self.deepSleepPercentage = String(format: "%.0f", deepSleepPercentage)
+                    }
+                    if let fatigueScore = profileResponse.fitness_profile.fatigue_score {
+                        self.fatigueRating = fatigueScore
+                    }
+                    
+                    // 如果有训练进度信息，更新组数信息
+                    if let progress = profileResponse.fitness_profile.training_progress {
+                        // 计算已完成组数 = 进度百分比 * 总组数 / 100
+                        if progress > 0 {
+                            if self.totalSets > 0 {
+                                // 根据进度百分比计算已完成组数
+                                self.completedSets = min(Int(Double(self.totalSets) * progress / 100.0), self.totalSets)
+                            } else if let trainingType = profileResponse.fitness_profile.training_type, !trainingType.isEmpty {
+                                // 如果有训练类型但无总组数，设置一个默认值
+                                self.totalSets = 5
+                                self.completedSets = min(Int(Double(self.totalSets) * progress / 100.0), self.totalSets)
+                            }
+                        }
+                    }
+                    
+                    // 更新饮食数据
+                    if let nutritionGoals = profileResponse.diet_profile.nutrition_goals {
+                        if let protein = nutritionGoals["protein"] {
+                            self.protein = String(format: "%.0f", protein)
+                            print("已更新蛋白质值: \(self.protein)")
+                        }
+                        if let fat = nutritionGoals["fat"] {
+                            self.fat = String(format: "%.0f", fat)
+                            print("已更新脂肪值: \(self.fat)")
+                        }
+                        if let carbs = nutritionGoals["carbs"] {
+                            self.carbs = String(format: "%.0f", carbs)
+                            print("已更新碳水值: \(self.carbs)")
+                        }
+                    }
+                    
+                    // 更新卡路里目标
+                    if let caloriePreference = profileResponse.diet_profile.calorie_preference {
+                        self.caloriesTarget = String(caloriePreference)
+                        print("已更新卡路里目标: \(self.caloriesTarget)")
+                    }
+                    
+                    // 尝试从扩展属性中获取饮食建议
+                    if let extendedAttributes = profileResponse.extended_attributes {
+                        if let dietAdvice = extendedAttributes["diet_advice"] {
+                            self.dietAdvice = dietAdvice
+                            print("已更新饮食建议: \(self.dietAdvice)")
+                        }
+                        
+                        if let trainingDetail = extendedAttributes["training_detail"] {
+                            self.trainingDetail = trainingDetail
+                        }
+                        
+                        if let restAdvice = extendedAttributes["rest_advice"] {
+                            self.restAdvice = restAdvice
+                        }
+                        
+                        if let nextTraining = extendedAttributes["next_training"] {
+                            self.nextTraining = nextTraining
+                        }
+                        
+                        if let recoveryAdvice = extendedAttributes["recovery_advice"] {
+                            self.recoveryAdvice = recoveryAdvice
+                        }
+                    }
+                    
+                    // 标记已加载初始数据并结束加载状态
+                    self.hasLoadedInitialData = true
+                    self.isLoading = false
                 }
                 
-                // 从肌肉群分析中获取第一个肌肉群
-                if let muscleGroupAnalysis = profileResponse.fitness_profile.muscle_group_analysis,
-                   let firstKey = muscleGroupAnalysis.keys.first {
-                    self.muscleGroup = firstKey
-                }
+                print("健身追踪数据刷新成功")
+            } catch let NetworkError.serverError(message) {
+                print("获取健身追踪数据失败 - 服务器错误: \(message)")
                 
-                // 如果有训练进度信息，更新组数信息
-                if let progress = profileResponse.fitness_profile.training_progress {
-                    // 这里假设训练进度是完成组数占总组数的百分比
-                    if progress > 0 && self.totalSets > 0 {
-                        self.completedSets = Int(Double(self.totalSets) * progress / 100.0)
+                // 如果是特定错误，比如用户档案不存在，我们可以创建一个
+                if message.contains("获取用户档案失败") {
+                    do {
+                        // 尝试通过更新基本信息来创建用户档案
+                        try await initializeUserProfile()
+                    } catch {
+                        print("初始化用户配置文件失败: \(error.localizedDescription)")
                     }
                 }
                 
-                // 标记已加载初始数据
-                self.hasLoadedInitialData = true
-            }
-            
-            print("健身追踪数据刷新成功")
-        } catch let NetworkError.serverError(message) {
-            print("获取健身追踪数据失败 - 服务器错误: \(message)")
-            
-            // 如果是特定错误，比如用户档案不存在，我们可以创建一个
-            if message.contains("获取用户档案失败") {
-                do {
-                    // 尝试通过更新基本信息来创建用户档案
-                    try await initializeUserProfile()
-                } catch {
-                    print("初始化用户配置文件失败: \(error.localizedDescription)")
+                await MainActor.run {
+                    self.isLoading = false
+                }
+            } catch {
+                print("获取健身追踪数据失败: \(error.localizedDescription)")
+                await MainActor.run {
+                    self.isLoading = false
                 }
             }
-        } catch {
-            print("获取健身追踪数据失败: \(error.localizedDescription)")
         }
+    }
+    
+    // 主动强制刷新数据，忽略刷新间隔限制
+    func forceRefreshData() async {
+        // 重置上次刷新时间以确保能够刷新
+        lastRefreshTime = Date(timeIntervalSince1970: 0)
+        
+        // 更新UI状态以指示正在加载
+        await MainActor.run {
+            isLoading = true
+        }
+        
+        // 取消任何正在进行的刷新任务
+        refreshTask?.cancel()
+        
+        // 创建新的刷新任务，使用强制刷新模式
+        refreshTask = Task {
+            do {
+                // 获取用户完整档案数据 - 强制不使用缓存
+                let profileResponse: FoodJourneyModels.CompleteProfile = try await NetworkService.shared.request(
+                    endpoint: "/profile",
+                    method: "GET",
+                    requiresAuth: true,
+                    cachePolicy: .reloadIgnoringLocalCacheData // 关键：强制不使用缓存
+                )
+                
+                // 确保任务没有被取消
+                if Task.isCancelled {
+                    return
+                }
+                
+                // 更新用户身体数据
+                await MainActor.run {
+                    // 更新身体数据
+                    if let weight = profileResponse.health_profile.weight {
+                        self.currentWeight = weight
+                    }
+                    if let bodyFat = profileResponse.health_profile.body_fat_percentage {
+                        self.currentBodyFat = bodyFat
+                    }
+                    if let muscleMass = profileResponse.health_profile.muscle_mass {
+                        self.currentMuscleWeight = muscleMass
+                    }
+                    if let bmr = profileResponse.health_profile.bmr {
+                        self.bmr = String(bmr)
+                    }
+                    
+                    // 更新训练相关数据
+                    if let trainingType = profileResponse.fitness_profile.training_type {
+                        self.trainingType = trainingType
+                    }
+                    
+                    // 从肌肉群分析中获取第一个肌肉群
+                    if let muscleGroupAnalysis = profileResponse.fitness_profile.muscle_group_analysis,
+                       let firstKey = muscleGroupAnalysis.keys.first {
+                        self.muscleGroup = firstKey
+                    }
+                    
+                    // 更新睡眠和恢复数据
+                    if let sleepDuration = profileResponse.fitness_profile.sleep_duration {
+                        self.sleepHours = String(format: "%.1f", sleepDuration)
+                    }
+                    if let deepSleepPercentage = profileResponse.fitness_profile.deep_sleep_percentage {
+                        self.deepSleepPercentage = String(format: "%.0f", deepSleepPercentage)
+                    }
+                    if let fatigueScore = profileResponse.fitness_profile.fatigue_score {
+                        self.fatigueRating = fatigueScore
+                    }
+                    
+                    // 如果有训练进度信息，更新组数信息
+                    if let progress = profileResponse.fitness_profile.training_progress {
+                        // 计算已完成组数 = 进度百分比 * 总组数 / 100
+                        if progress > 0 {
+                            if self.totalSets > 0 {
+                                // 根据进度百分比计算已完成组数
+                                self.completedSets = min(Int(Double(self.totalSets) * progress / 100.0), self.totalSets)
+                            } else if let trainingType = profileResponse.fitness_profile.training_type, !trainingType.isEmpty {
+                                // 如果有训练类型但无总组数，设置一个默认值
+                                self.totalSets = 5
+                                self.completedSets = min(Int(Double(self.totalSets) * progress / 100.0), self.totalSets)
+                            }
+                        }
+                    }
+                    
+                    // 更新饮食数据
+                    if let nutritionGoals = profileResponse.diet_profile.nutrition_goals {
+                        if let protein = nutritionGoals["protein"] {
+                            self.protein = String(format: "%.0f", protein)
+                            print("已更新蛋白质值: \(self.protein)")
+                        }
+                        if let fat = nutritionGoals["fat"] {
+                            self.fat = String(format: "%.0f", fat)
+                            print("已更新脂肪值: \(self.fat)")
+                        }
+                        if let carbs = nutritionGoals["carbs"] {
+                            self.carbs = String(format: "%.0f", carbs)
+                            print("已更新碳水值: \(self.carbs)")
+                        }
+                    }
+                    
+                    // 更新卡路里目标
+                    if let caloriePreference = profileResponse.diet_profile.calorie_preference {
+                        self.caloriesTarget = String(caloriePreference)
+                        print("已更新卡路里目标: \(self.caloriesTarget)")
+                    }
+                    
+                    // 尝试从扩展属性中获取饮食建议
+                    if let extendedAttributes = profileResponse.extended_attributes {
+                        if let dietAdvice = extendedAttributes["diet_advice"] {
+                            self.dietAdvice = dietAdvice
+                            print("已更新饮食建议: \(self.dietAdvice)")
+                        }
+                        
+                        if let trainingDetail = extendedAttributes["training_detail"] {
+                            self.trainingDetail = trainingDetail
+                        }
+                        
+                        if let restAdvice = extendedAttributes["rest_advice"] {
+                            self.restAdvice = restAdvice
+                        }
+                        
+                        if let nextTraining = extendedAttributes["next_training"] {
+                            self.nextTraining = nextTraining
+                        }
+                        
+                        if let recoveryAdvice = extendedAttributes["recovery_advice"] {
+                            self.recoveryAdvice = recoveryAdvice
+                        }
+                    }
+                    
+                    // 标记已加载初始数据并结束加载状态
+                    self.hasLoadedInitialData = true
+                    self.isLoading = false
+                }
+                
+                print("健身追踪数据强制刷新成功")
+            } catch let NetworkError.serverError(message) {
+                print("强制刷新获取健身追踪数据失败 - 服务器错误: \(message)")
+                await MainActor.run {
+                    self.isLoading = false
+                }
+            } catch {
+                print("强制刷新获取健身追踪数据失败: \(error.localizedDescription)")
+                await MainActor.run {
+                    self.isLoading = false
+                }
+            }
+        }
+    }
+    
+    // 当视图将要消失时调用，取消任何正在进行的刷新任务
+    func cancelRefresh() {
+        refreshTask?.cancel()
+        refreshTask = nil
+        dietRefreshTask?.cancel()
+        dietRefreshTask = nil
+        bodyDataRefreshTask?.cancel()
+        bodyDataRefreshTask = nil
+        trainingDataRefreshTask?.cancel()
+        trainingDataRefreshTask = nil
+        recoveryDataRefreshTask?.cancel()
+        recoveryDataRefreshTask = nil
     }
     
     // 初始化用户配置文件
@@ -198,6 +510,338 @@ class HealthTrackViewModel: ObservableObject {
         
         print("成功初始化用户配置文件: \(response.message)")
     }
+    
+    // 保存饮食数据
+    func saveDietData() async {
+        await MainActor.run {
+            isDietDataSaving = true
+            showDietSaveSuccess = false
+        }
+        
+        do {
+            // 1. 记录早餐
+            let breakfastCalories = Int(calories) ?? 0 / 3
+            let breakfastItems = createFoodItems(mealType: "早餐", description: breakfast, caloriesPortion: breakfastCalories)
+            try await recordMeal(mealType: "早餐", foodItems: breakfastItems, totalCalories: Float(breakfastCalories))
+            
+            // 2. 记录午餐
+            let lunchCalories = Int(calories) ?? 0 / 3
+            let lunchItems = createFoodItems(mealType: "午餐", description: lunch, caloriesPortion: lunchCalories)
+            try await recordMeal(mealType: "午餐", foodItems: lunchItems, totalCalories: Float(lunchCalories))
+            
+            // 3. 记录晚餐
+            let dinnerCalories = Int(calories) ?? 0 / 3
+            let dinnerItems = createFoodItems(mealType: "晚餐", description: dinner, caloriesPortion: dinnerCalories)
+            try await recordMeal(mealType: "晚餐", foodItems: dinnerItems, totalCalories: Float(dinnerCalories))
+            
+            // 4. 更新饮食偏好
+            let nutritionGoals: [String: Float] = [
+                "protein": Float(protein) ?? 0.0,
+                "fat": Float(fat) ?? 0.0,
+                "carbs": Float(carbs) ?? 0.0
+            ]
+            try await updateDietPreferences(calorieTarget: Int(caloriesTarget) ?? 2000, nutritionGoals: nutritionGoals, advice: dietAdvice)
+            
+            // 5. 强制刷新数据
+            await forceRefreshData()
+            
+            // 6. 显示成功消息
+            await MainActor.run {
+                isDietDataSaving = false
+                showDietSaveSuccess = true
+                
+                // 3秒后自动隐藏成功消息
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    self.showDietSaveSuccess = false
+                }
+            }
+            
+            print("饮食数据保存成功")
+        } catch {
+            print("保存饮食数据失败: \(error.localizedDescription)")
+            await MainActor.run {
+                isDietDataSaving = false
+                dietLoadError = error.localizedDescription
+                
+                // 3秒后自动隐藏错误消息
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    self.dietLoadError = nil
+                }
+            }
+        }
+    }
+    
+    // 创建食物项目数据
+    private func createFoodItems(mealType: String, description: String, caloriesPortion: Int) -> [[String: Any]] {
+        // 从描述中解析食物项目
+        let foodDescriptions = description.components(separatedBy: "、")
+        var items: [[String: Any]] = []
+        
+        // 为每个食物创建简单的数据结构
+        for (_, food) in foodDescriptions.enumerated() {
+            if !food.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let calories = foodDescriptions.count > 0 ? caloriesPortion / foodDescriptions.count : 0 // 平均分配卡路里
+                let item: [String: Any] = [
+                    "food_name": food,
+                    "portion": 100.0, // 默认100克
+                    "calories": Float(calories),
+                    "protein": Float(Int(protein) ?? 0) / Float(max(1, foodDescriptions.count)),
+                    "carbs": Float(Int(carbs) ?? 0) / Float(max(1, foodDescriptions.count)),
+                    "fat": Float(Int(fat) ?? 0) / Float(max(1, foodDescriptions.count)),
+                    "fiber": Float(1.0) // 设置默认膳食纤维值
+                ]
+                items.append(item)
+            }
+        }
+        
+        return items
+    }
+    
+    // 记录一餐的方法
+    private func recordMeal(mealType: String, foodItems: [[String: Any]], totalCalories: Float) async throws {
+        // 准备请求数据
+        let requestData: [String: Any] = [
+            "meal_type": mealType,
+            "food_items": foodItems,
+            "total_calories": totalCalories,
+            "notes": "用户记录的\(mealType)",
+            "recorded_at": ISO8601DateFormatter().string(from: Date())
+        ]
+        
+        // 将字典转为JSON数据
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: requestData) else {
+            print("饮食数据序列化失败")
+            throw NSError(domain: "FoodJourney", code: 1001, userInfo: [NSLocalizedDescriptionKey: "饮食数据序列化失败"])
+        }
+        
+        // 使用async/await方式调用NetworkService
+        let response: FoodJourneyModels.MealResponse = try await NetworkService.shared.request(
+            endpoint: "/profile/meal",
+            method: "POST",
+            body: jsonData,
+            requiresAuth: true,
+            cachePolicy: .reloadIgnoringLocalCacheData // 关键：强制不使用缓存
+        )
+        
+        print("\(mealType)记录成功: \(response.id)")
+    }
+    
+    // 更新饮食偏好
+    private func updateDietPreferences(calorieTarget: Int, nutritionGoals: [String: Float], advice: String) async throws {
+        // 准备请求数据
+        let requestData: [String: Any] = [
+            "calorie_preference": calorieTarget,
+            "nutrition_goals": nutritionGoals,
+            "extended_attributes": [
+                "diet_advice": advice
+            ]
+        ]
+        
+        // 将字典转为JSON数据
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: requestData) else {
+            print("饮食偏好数据序列化失败")
+            throw NSError(domain: "FoodJourney", code: 1002, userInfo: [NSLocalizedDescriptionKey: "饮食偏好数据序列化失败"])
+        }
+        
+        // 使用async/await方式调用NetworkService，强制不使用缓存
+        let response: FoodJourneyModels.UpdateResponse = try await NetworkService.shared.request(
+            endpoint: "/profile/diet",
+            method: "PUT",
+            body: jsonData,
+            requiresAuth: true,
+            cachePolicy: .reloadIgnoringLocalCacheData // 关键：强制不使用缓存
+        )
+        
+        print("饮食偏好更新成功: \(response.message)")
+    }
+    
+    // 保存身体数据
+    func saveBodyData() async {
+        await MainActor.run {
+            isBodyDataSaving = true
+            showBodyDataSaveSuccess = false
+        }
+        
+        do {
+            // 准备身体数据
+            let bodyData: [String: Any] = [
+                "weight": Double(currentWeight),
+                "body_fat_percentage": Double(currentBodyFat),
+                "muscle_mass": Double(currentMuscleWeight),
+                "bmr": Int(bmr) ?? 0
+            ]
+            
+            // 将字典转为JSON数据
+            guard let jsonData = try? JSONSerialization.data(withJSONObject: bodyData) else {
+                print("身体数据序列化失败")
+                throw NSError(domain: "FoodJourney", code: 1003, userInfo: [NSLocalizedDescriptionKey: "身体数据序列化失败"])
+            }
+            
+            // 使用async/await方式调用NetworkService，强制不使用缓存
+            let response: FoodJourneyModels.UpdateResponse = try await NetworkService.shared.request(
+                endpoint: "/profile/basic",
+                method: "PUT",
+                body: jsonData,
+                requiresAuth: true,
+                cachePolicy: .reloadIgnoringLocalCacheData
+            )
+            
+            // 强制刷新数据
+            await forceRefreshData()
+            
+            // 显示成功消息
+            await MainActor.run {
+                isBodyDataSaving = false
+                showBodyDataSaveSuccess = true
+                
+                // 3秒后自动隐藏成功消息
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    self.showBodyDataSaveSuccess = false
+                }
+            }
+            
+            print("身体数据保存成功: \(response.message)")
+        } catch {
+            print("保存身体数据失败: \(error.localizedDescription)")
+            await MainActor.run {
+                isBodyDataSaving = false
+                bodyDataLoadError = error.localizedDescription
+                
+                // 3秒后自动隐藏错误消息
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    self.bodyDataLoadError = nil
+                }
+            }
+        }
+    }
+    
+    // 保存训练数据
+    func saveTrainingData() async {
+        await MainActor.run {
+            isTrainingDataSaving = true
+            showTrainingDataSaveSuccess = false
+        }
+        
+        do {
+            // 准备训练数据
+            let trainingData: [String: Any] = [
+                "training_type": trainingType,
+                "training_progress": Double(completedSets) / Double(max(1, totalSets)) * 100.0,
+                "muscle_group_analysis": [
+                    muscleGroup: "主要肌群"
+                ],
+                "extended_attributes": [
+                    "training_detail": trainingDetail,
+                    "rest_advice": restAdvice,
+                    "next_training": nextTraining
+                ]
+            ]
+            
+            // 将字典转为JSON数据
+            guard let jsonData = try? JSONSerialization.data(withJSONObject: trainingData) else {
+                print("训练数据序列化失败")
+                throw NSError(domain: "FoodJourney", code: 1004, userInfo: [NSLocalizedDescriptionKey: "训练数据序列化失败"])
+            }
+            
+            // 使用async/await方式调用NetworkService，强制不使用缓存
+            let response: FoodJourneyModels.UpdateResponse = try await NetworkService.shared.request(
+                endpoint: "/profile/fitness",
+                method: "PUT",
+                body: jsonData,
+                requiresAuth: true,
+                cachePolicy: .reloadIgnoringLocalCacheData
+            )
+            
+            // 强制刷新数据
+            await forceRefreshData()
+            
+            // 显示成功消息
+            await MainActor.run {
+                isTrainingDataSaving = false
+                showTrainingDataSaveSuccess = true
+                
+                // 3秒后自动隐藏成功消息
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    self.showTrainingDataSaveSuccess = false
+                }
+            }
+            
+            print("训练数据保存成功: \(response.message)")
+        } catch {
+            print("保存训练数据失败: \(error.localizedDescription)")
+            await MainActor.run {
+                isTrainingDataSaving = false
+                trainingDataLoadError = error.localizedDescription
+                
+                // 3秒后自动隐藏错误消息
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    self.trainingDataLoadError = nil
+                }
+            }
+        }
+    }
+    
+    // 保存恢复数据
+    func saveRecoveryData() async {
+        await MainActor.run {
+            isRecoveryDataSaving = true
+            showRecoveryDataSaveSuccess = false
+        }
+        
+        do {
+            // 准备恢复数据
+            let recoveryData: [String: Any] = [
+                "sleep_duration": Double(sleepHours) ?? 0.0,
+                "deep_sleep_percentage": Double(deepSleepPercentage) ?? 0.0,
+                "fatigue_score": fatigueRating,
+                "extended_attributes": [
+                    "recovery_advice": recoveryAdvice
+                ]
+            ]
+            
+            // 将字典转为JSON数据
+            guard let jsonData = try? JSONSerialization.data(withJSONObject: recoveryData) else {
+                print("恢复数据序列化失败")
+                throw NSError(domain: "FoodJourney", code: 1005, userInfo: [NSLocalizedDescriptionKey: "恢复数据序列化失败"])
+            }
+            
+            // 使用async/await方式调用NetworkService，强制不使用缓存
+            let response: FoodJourneyModels.UpdateResponse = try await NetworkService.shared.request(
+                endpoint: "/profile/fitness",
+                method: "PUT",
+                body: jsonData,
+                requiresAuth: true,
+                cachePolicy: .reloadIgnoringLocalCacheData
+            )
+            
+            // 强制刷新数据
+            await forceRefreshData()
+            
+            // 显示成功消息
+            await MainActor.run {
+                isRecoveryDataSaving = false
+                showRecoveryDataSaveSuccess = true
+                
+                // 3秒后自动隐藏成功消息
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    self.showRecoveryDataSaveSuccess = false
+                }
+            }
+            
+            print("恢复数据保存成功: \(response.message)")
+        } catch {
+            print("保存恢复数据失败: \(error.localizedDescription)")
+            await MainActor.run {
+                isRecoveryDataSaving = false
+                recoveryDataLoadError = error.localizedDescription
+                
+                // 3秒后自动隐藏错误消息
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    self.recoveryDataLoadError = nil
+                }
+            }
+        }
+    }
 }
 
 // 主视图，显示健身追踪功能的入口页面
@@ -208,6 +852,9 @@ struct HealthTrackView: View {
     
     // 控制目标编辑模式
     @State private var isEditingGoals = false
+    
+    // 添加一个状态变量用于跟踪页面是否正在出现
+    @State private var isAppearing = false
     
     // 计算短期目标进度（增肌）
     private var shortTermProgress: Double {
@@ -475,21 +1122,24 @@ struct HealthTrackView: View {
                             }
                             NavigationLink(destination: TrainingProgressDetailView().environmentObject(viewModel)) {
                                 CardView(title: "训练进度",
-                                         subtitle: "今日: \(viewModel.muscleGroup)训练，完成\(viewModel.completedSets)/\(viewModel.totalSets)组\(viewModel.trainingType)",
+                                         subtitle: viewModel.trainingType.isEmpty ? "尚未记录训练" : "今日: \(viewModel.trainingType)训练，完成\(viewModel.completedSets)/\(viewModel.totalSets)组",
                                          icon: "figure.walk",
                                          iconColor: .blue) // 蓝色 - 训练进度
                             }
-                            NavigationLink(destination: DietDetailView()) {
+                            NavigationLink(destination: DietDetailView().environmentObject(viewModel)) {
                                 CardView(title: "饮食情况",
-                                         subtitle: "摄入: 1500 kcal, 蛋白质: 100g",
+                                         subtitle: "摄入: \(viewModel.calories) kcal, 蛋白质: \(viewModel.protein)g",
                                          icon: "leaf.fill",
                                          iconColor: .green) // 绿色 - 饮食情况
                             }
-                            NavigationLink(destination: RecoveryDetailView()) {
+                            NavigationLink(destination: RecoveryDetailView().environmentObject(viewModel)) {
                                 CardView(title: "恢复状态",
-                                         subtitle: "睡眠: 7小时, 疲劳感: 4/5",
+                                         subtitle: "睡眠: \(viewModel.sleepHours)小时, 疲劳感: \(viewModel.fatigueRating)/5",
                                          icon: "bed.double.fill",
                                          iconColor: .purple) // 紫色 - 恢复状态
+                            }
+                            .onAppear {
+                                print("恢复状态卡片显示 - 睡眠: \(viewModel.sleepHours)小时, 疲劳感: \(viewModel.fatigueRating)/5")
                             }
                             NavigationLink(destination: RecipeListView()) {
                                 CardView(title: "菜谱",
@@ -502,29 +1152,46 @@ struct HealthTrackView: View {
                         
                         Spacer()
                     }
-                    .navigationTitle("健身追踪器")
-                    // 点击空白处收起键盘
-                    .onTapGesture {
-                        if isEditingGoals {
-                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                        }
+                }
+                .navigationTitle("健身追踪器")
+                // 点击空白处收起键盘
+                .onTapGesture {
+                    if isEditingGoals {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                     }
-                    // 添加刷新数据的生命周期函数
-                    .onAppear {
-                        // 仅在首次出现时刷新数据，后续的更新依赖用户通过下拉刷新触发
-                        Task {
-                            await viewModel.refreshData()
-                        }
-                    }
-                    // 添加下拉刷新功能，但使用更易读的方式
-                    .refreshable {
-                        print("用户手动触发刷新")
+                }
+                // 添加刷新数据的生命周期函数
+                .onAppear {
+                    // 标记页面正在出现
+                    isAppearing = true
+                    // 当视图出现时，刷新数据
+                    Task {
                         await viewModel.refreshData()
+                        isAppearing = false
                     }
+                }
+                .onDisappear {
+                    // 当视图消失时，取消任何正在进行的刷新任务
+                    viewModel.cancelRefresh()
+                }
+                .refreshable {
+                    // 使用强制刷新方法，忽略刷新间隔限制
+                    await viewModel.forceRefreshData()
+                }
+                
+                // 加载指示器
+                if isAppearing || viewModel.isLoading {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle())
+                        .scaleEffect(1.5)
+                        .padding()
+                        .background(Color.white.opacity(0.8))
+                        .cornerRadius(10)
                 }
             }
         }
-}
+    }
+
 
 struct CardView: View {
     var title: String

@@ -55,7 +55,8 @@ class NetworkService: NSObject, URLSessionDelegate {
         method: String = "GET",
         body: Data? = nil,
         requiresAuth: Bool = false,
-        contentType: String = "application/json"
+        contentType: String = "application/json",
+        cachePolicy: URLRequest.CachePolicy = .useProtocolCachePolicy
     ) async throws -> T {
         guard let url = URL(string: baseURL + endpoint) else {
             throw NetworkError.invalidURL
@@ -64,6 +65,7 @@ class NetworkService: NSObject, URLSessionDelegate {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        request.cachePolicy = cachePolicy // 应用缓存策略
         
         if requiresAuth {
             if let token = UserDefaults.standard.string(forKey: "auth_token") {

@@ -6,7 +6,8 @@ struct RecipeListView: View {
     @State private var showingError = false
     @State private var errorMessage = ""
     @State private var isLoading = false
-    @State private var showingCreateRecipe = false  // Add this line
+    @State private var showingCreateRecipe = false
+    @State private var selectedCategories: Set<String> = []
     
     private let columns = [
         GridItem(.flexible()),
@@ -15,60 +16,79 @@ struct RecipeListView: View {
     
     var body: some View {
         NavigationView {
-            ScrollView {
-                if isLoading {
-                    ProgressView()
-                        .padding()
-                } else if recipeService.recipes.isEmpty {
-                    VStack {
-                        Spacer()
-                        Text("未获取到菜谱")
-                            .foregroundColor(.secondary)
-                            .padding()
-                        Spacer()
+            mainContentView
+                .navigationTitle("美食食谱")
+                .searchable(text: $searchText, prompt: "搜索食谱")
+                .onChange(of: searchText) { oldValue, newValue in
+                    Task {
+                        await searchRecipes(query: newValue)
                     }
-                } else {
-                    LazyVGrid(columns: columns, spacing: 16) {
-                        ForEach(recipeService.recipes) { recipe in
-                            NavigationLink(destination: RecipeDetailView(recipe: recipe)) {
-                                RecipeCard(recipe: recipe)
-                            }
+                }
+                .onChange(of: selectedCategories) { oldValue, newValue in
+                    recipeService.filterRecipes(by: newValue)
+                }
+                .refreshable {
+                    await loadRecipes()
+                }
+                .alert("错误", isPresented: $showingError) {
+                    Button("确定", role: .cancel) {}
+                } message: {
+                    Text(errorMessage)
+                }
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button(action: {
+                            showingCreateRecipe = true
+                        }) {
+                            Image(systemName: "plus")
                         }
                     }
-                    .padding()
                 }
-            }
-            .navigationTitle("美食食谱")
-            .searchable(text: $searchText, prompt: "搜索食谱")
-            .onChange(of: searchText) { newValue in
-                Task {
-                    await searchRecipes(query: newValue)
+                .sheet(isPresented: $showingCreateRecipe) {
+                    CreateRecipeView(isPresented: $showingCreateRecipe)
                 }
-            }
-            .refreshable {
-                await loadRecipes()
-            }
-            .alert("错误", isPresented: $showingError) {
-                Button("确定", role: .cancel) {}
-            } message: {
-                Text(errorMessage)
-            }
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        showingCreateRecipe = true
-                    }) {
-                        Image(systemName: "plus")
-                    }
-                }
-            }
-            .sheet(isPresented: $showingCreateRecipe) {
-                CreateRecipeView(isPresented: $showingCreateRecipe)
-            }
         }
         .task {
             await loadRecipes()
         }
+    }
+    
+    private var mainContentView: some View {
+        ScrollView {
+            if isLoading {
+                loadingView
+            } else if recipeService.filteredRecipes.isEmpty {
+                emptyStateView
+            } else {
+                recipeGridView
+            }
+        }
+    }
+    
+    private var loadingView: some View {
+        ProgressView()
+            .padding()
+    }
+    
+    private var emptyStateView: some View {
+        VStack {
+            Spacer()
+            Text("未获取到菜谱")
+                .foregroundColor(.secondary)
+                .padding()
+            Spacer()
+        }
+    }
+    
+    private var recipeGridView: some View {
+        LazyVGrid(columns: columns, spacing: 16) {
+            ForEach(recipeService.filteredRecipes) { recipe in
+                NavigationLink(destination: RecipeDetailView(recipe: recipe)) {
+                    RecipeCard(recipe: recipe)
+                }
+            }
+        }
+        .padding()
     }
     
     private func loadRecipes() async {

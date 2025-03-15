@@ -10,6 +10,7 @@ struct AccountView: View {
     @AppStorage("use_biometric") private var useBiometric = false
     @State private var showChangePassword = false
     @State private var showingAboutSheet = false
+    @State private var isAuthViewPresented = false
     
     var body: some View {
             VStack(spacing: 0) {
@@ -105,11 +106,16 @@ struct AccountView: View {
             .sheet(isPresented: $showingAboutSheet) {
                 AboutView()
             }
-            .onChange(of: selectedImage) { newImage in
+            .onChange(of: selectedImage) { oldImage, newImage in
                 if let image = newImage {
                     Task {
                         await uploadAvatar(image)
                     }
+                }
+            }
+            .onChange(of: isAuthViewPresented) { oldValue, newValue in
+                if !newValue {
+                    refreshProfileData()
                 }
             }
             .alert(isPresented: $showError) {
@@ -149,6 +155,10 @@ struct AccountView: View {
                 useBiometric = false
             }
         }
+    }
+    
+    private func refreshProfileData() {
+        // Implementation of refreshProfileData method
     }
 }
 
