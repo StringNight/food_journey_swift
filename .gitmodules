@@ -1,0 +1,3 @@
+[submodule "food_journey_backend"]
+	path = food_journey_backend
+	url = https://github.com/StringNight/food_journey.git
